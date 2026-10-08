@@ -1,0 +1,7 @@
+### Trilha de auditoria completa
+GET http://localhost:8083/api/v1/audit/events
+Content-Type: application/json
+
+### Só tentativas de login que falharam
+GET http://localhost:8083/api/v1/audit/events?type=user.login_failed
+Content-Type: application/json
