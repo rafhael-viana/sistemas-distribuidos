@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log"
 	"net/mail"
 	"strings"
 	"time"
@@ -14,9 +15,13 @@ import (
 
 	"github.com/rafhael-viana/TCC/internal/auth/model"
 	"github.com/rafhael-viana/TCC/internal/auth/repository"
+	"github.com/rafhael-viana/TCC/internal/events"
 )
 
-const minPasswordLen = 8
+const (
+	minPasswordLen = 8
+	eventSource    = "auth"
+)
 
 var ErrInvalidCredentials = errors.New("invalid credentials")
 
@@ -43,14 +48,21 @@ type AuthResult struct {
 	User      *model.User `json:"user"`
 }
 
+// EventPublisher publica eventos de domínio (ex.: no Kafka). key define a
+// partição, garantindo a ordem dos eventos de um mesmo usuário.
+type EventPublisher interface {
+	Publish(ctx context.Context, key string, e events.Event) error
+}
+
 type AuthService struct {
 	users    repository.UserRepository
+	events   EventPublisher
 	secret   []byte
 	tokenTTL time.Duration
 }
 
-func NewAuthService(users repository.UserRepository, secret string, tokenTTL time.Duration) *AuthService {
-	return &AuthService{users: users, secret: []byte(secret), tokenTTL: tokenTTL}
+func NewAuthService(users repository.UserRepository, publisher EventPublisher, secret string, tokenTTL time.Duration) *AuthService {
+	return &AuthService{users: users, events: publisher, secret: []byte(secret), tokenTTL: tokenTTL}
 }
 
 func (s *AuthService) Register(ctx context.Context, in RegisterInput) (*model.User, error) {
@@ -89,6 +101,13 @@ func (s *AuthService) Register(ctx context.Context, in RegisterInput) (*model.Us
 	if err := s.users.Create(ctx, u); err != nil {
 		return nil, err
 	}
+
+	s.publish(ctx, u.ID, events.TypeUserRegistered, events.UserRegistered{
+		UserID:   u.ID,
+		Name:     u.Name,
+		Username: u.Username,
+		Email:    u.Email,
+	})
 	return u, nil
 }
 
@@ -108,6 +127,7 @@ func (s *AuthService) Login(ctx context.Context, in LoginInput) (*AuthResult, er
 		u, err = s.users.FindByUsername(ctx, login)
 	}
 	if errors.Is(err, repository.ErrUserNotFound) {
+		s.publish(ctx, login, events.TypeLoginFailed, events.LoginFailed{Login: login, Reason: "user_not_found"})
 		return nil, ErrInvalidCredentials
 	}
 	if err != nil {
@@ -115,6 +135,7 @@ func (s *AuthService) Login(ctx context.Context, in LoginInput) (*AuthResult, er
 	}
 
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.Password)) != nil {
+		s.publish(ctx, u.ID, events.TypeLoginFailed, events.LoginFailed{Login: login, Reason: "wrong_password"})
 		return nil, ErrInvalidCredentials
 	}
 
@@ -128,7 +149,20 @@ func (s *AuthService) Login(ctx context.Context, in LoginInput) (*AuthResult, er
 		return nil, fmt.Errorf("sign token: %w", err)
 	}
 
+	s.publish(ctx, u.ID, events.TypeLoginSucceeded, events.LoginSucceeded{UserID: u.ID})
 	return &AuthResult{Token: token, ExpiresAt: expiresAt.UTC(), User: u}, nil
+}
+
+// publish é best effort: uma falha ao publicar é logada mas não desfaz a
+// operação nem muda a resposta ao cliente.
+func (s *AuthService) publish(ctx context.Context, key, typ string, data any) {
+	e, err := events.New(eventSource, typ, data)
+	if err == nil {
+		err = s.events.Publish(ctx, key, e)
+	}
+	if err != nil {
+		log.Printf("publish %s event: %v", typ, err)
+	}
 }
 
 func validEmail(email string) bool {
