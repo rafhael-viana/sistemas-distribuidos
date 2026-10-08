@@ -1,0 +1,59 @@
+### Cadastro -> 201
+POST http://localhost:8080/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "name": "Rafhael Viana",
+  "username": "rafhael",
+  "email": "rafhael@example.com",
+  "password": "senha12345"
+}
+
+### Cadastro com email já usado -> 409
+POST http://localhost:8080/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "name": "Outro Usuário",
+  "username": "outro",
+  "email": "rafhael@example.com",
+  "password": "senha12345"
+}
+
+### Cadastro com senha curta -> 400
+POST http://localhost:8080/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "name": "Rafhael Viana",
+  "username": "rafhael2",
+  "email": "rafhael2@example.com",
+  "password": "123"
+}
+
+### Login por email -> 200 (retorna token)
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "login": "rafhael@example.com",
+  "password": "senha12345"
+}
+
+### Login por username -> 200 (retorna token)
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "login": "rafhael",
+  "password": "senha12345"
+}
+
+### Login com senha errada -> 401
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "login": "rafhael@example.com",
+  "password": "senhaerrada"
+}
