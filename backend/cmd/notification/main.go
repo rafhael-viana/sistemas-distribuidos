@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/rafhael-viana/TCC/internal/config"
+	"github.com/rafhael-viana/TCC/internal/database"
 	"github.com/rafhael-viana/TCC/internal/eventbus"
 	"github.com/rafhael-viana/TCC/internal/events"
 	"github.com/rafhael-viana/TCC/internal/notification/consumer"
@@ -22,7 +23,14 @@ func main() {
 	cfg := config.Load("NOTIFICATION_PORT", "8082")
 
 	// Envio de email mockado por enquanto: os emails só aparecem no log.
-	emails := repository.NewMemoryEmailRepository()
+	db, err := database.Connect(context.Background(), cfg.DBDriver, cfg.DatabaseURL, repository.Schema)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var emails repository.EmailRepository = repository.NewMemoryEmailRepository()
+	if db != nil {
+		emails = repository.NewPostgresEmailRepository(db)
+	}
 	emailService := service.NewEmailService(emails, sender.NewMockSender())
 	emailHandler := handler.NewEmailHandler(emailService)
 
@@ -41,10 +49,13 @@ func main() {
 	}()
 
 	srv := server.New(cfg, router.New(emailHandler))
-	err := srv.Run()
+	err = srv.Run()
 
 	cancel()
 	<-consumed
+	if db != nil {
+		db.Close()
+	}
 	if err != nil {
 		log.Fatalf("server error: %v", err)
 	}

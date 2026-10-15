@@ -5,9 +5,20 @@
 # report 8084 e
 # Kafka em localhost:9092 (para rodar um serviço fora do compose; mude com
 # KAFKA_HOST_PORT se a porta já estiver em uso).
+#
+# Banco de dados (copie .env.example para .env antes; veja o README):
+# DB_DRIVER=memory (padrão) mantém tudo em
+# memória; DB_DRIVER=postgres sobe também o Postgres (porta 5432 no host) e
+# cada serviço usa o próprio banco nele:
+#   DB_DRIVER=postgres docker compose up --build
 
 x-service: &service
   restart: unless-stopped
+
+# Só existe quando DB_DRIVER=postgres; com memory o compose ignora.
+x-postgres-dependency: &postgres-dependency
+  condition: service_healthy
+  required: false
 
 x-healthcheck: &healthcheck
   interval: 5s
@@ -15,6 +26,21 @@ x-healthcheck: &healthcheck
   retries: 10
 
 services:
+  postgres:
+    image: postgres:17.6-alpine
+    profiles: [postgres]
+    environment:
+      POSTGRES_USER: tcc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tcc}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U tcc -d report"]
+      <<: *healthcheck
+
   kafka:
     image: apache/kafka:4.1.0
     environment:
@@ -65,7 +91,10 @@ services:
     depends_on:
       kafka-init:
         condition: service_completed_successfully
+      postgres: *postgres-dependency
     environment:
+      DB_DRIVER: ${DB_DRIVER:-memory}
+      DATABASE_URL: postgres://tcc:${POSTGRES_PASSWORD:-tcc}@postgres:5432/auth?sslmode=disable
       AUTH_PORT: "8081"
       KAFKA_BROKERS: kafka:29092
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
@@ -84,7 +113,10 @@ services:
     depends_on:
       kafka-init:
         condition: service_completed_successfully
+      postgres: *postgres-dependency
     environment:
+      DB_DRIVER: ${DB_DRIVER:-memory}
+      DATABASE_URL: postgres://tcc:${POSTGRES_PASSWORD:-tcc}@postgres:5432/notification?sslmode=disable
       NOTIFICATION_PORT: "8082"
       KAFKA_BROKERS: kafka:29092
     ports:
@@ -102,7 +134,10 @@ services:
     depends_on:
       kafka-init:
         condition: service_completed_successfully
+      postgres: *postgres-dependency
     environment:
+      DB_DRIVER: ${DB_DRIVER:-memory}
+      DATABASE_URL: postgres://tcc:${POSTGRES_PASSWORD:-tcc}@postgres:5432/audit?sslmode=disable
       AUDIT_PORT: "8083"
       KAFKA_BROKERS: kafka:29092
     ports:
@@ -120,7 +155,10 @@ services:
     depends_on:
       kafka-init:
         condition: service_completed_successfully
+      postgres: *postgres-dependency
     environment:
+      DB_DRIVER: ${DB_DRIVER:-memory}
+      DATABASE_URL: postgres://tcc:${POSTGRES_PASSWORD:-tcc}@postgres:5432/report?sslmode=disable
       REPORT_PORT: "8084"
       KAFKA_BROKERS: kafka:29092
       REPORTS_DIR: /data/reports
@@ -152,3 +190,4 @@ services:
 
 volumes:
   reports:
+  pgdata:

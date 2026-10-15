@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/rafhael-viana/TCC/internal/config"
+	"github.com/rafhael-viana/TCC/internal/database"
 	"github.com/rafhael-viana/TCC/internal/eventbus"
 	"github.com/rafhael-viana/TCC/internal/events"
 	"github.com/rafhael-viana/TCC/internal/report/consumer"
@@ -36,8 +37,18 @@ func main() {
 
 	publisher := eventbus.NewKafkaPublisher(cfg.KafkaBrokers, events.TopicReport)
 
-	activity := repository.NewMemoryActivityRepository()
-	reports := repository.NewMemoryReportRepository()
+	db, err := database.Connect(context.Background(), cfg.DBDriver, cfg.DatabaseURL, repository.Schema)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var (
+		activity repository.ActivityRepository = repository.NewMemoryActivityRepository()
+		reports  repository.ReportRepository   = repository.NewMemoryReportRepository()
+	)
+	if db != nil {
+		activity = repository.NewPostgresActivityRepository(db)
+		reports = repository.NewPostgresReportRepository(db)
+	}
 	reportService := service.NewReportService(reports, objects, generator.New(activity), publisher)
 	reportHandler := handler.NewReportHandler(reportService)
 
@@ -65,6 +76,9 @@ func main() {
 	consumers.Wait()
 	if cerr := publisher.Close(); cerr != nil {
 		log.Printf("close publisher: %v", cerr)
+	}
+	if db != nil {
+		db.Close()
 	}
 	if err != nil {
 		log.Fatalf("server error: %v", err)

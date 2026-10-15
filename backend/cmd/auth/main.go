@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"log"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/rafhael-viana/TCC/internal/auth/router"
 	"github.com/rafhael-viana/TCC/internal/auth/service"
 	"github.com/rafhael-viana/TCC/internal/config"
+	"github.com/rafhael-viana/TCC/internal/database"
 	"github.com/rafhael-viana/TCC/internal/eventbus"
 	"github.com/rafhael-viana/TCC/internal/events"
 	"github.com/rafhael-viana/TCC/internal/server"
@@ -24,17 +26,28 @@ func main() {
 
 	publisher := eventbus.NewKafkaPublisher(cfg.KafkaBrokers, events.TopicAuth)
 
-	users := repository.NewMemoryUserRepository()
+	db, err := database.Connect(context.Background(), cfg.DBDriver, cfg.DatabaseURL, repository.Schema)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var users repository.UserRepository = repository.NewMemoryUserRepository()
+	if db != nil {
+		users = repository.NewPostgresUserRepository(db)
+	}
+
 	authService := service.NewAuthService(users, publisher, cfg.JWTSecret, cfg.TokenTTL)
 	authHandler := handler.NewAuthHandler(authService)
 
 	srv := server.New(cfg, router.New(authHandler))
 
-	err := srv.Run()
+	err = srv.Run()
 
 	// Envia os eventos que ainda estão no buffer antes de sair.
 	if cerr := publisher.Close(); cerr != nil {
 		log.Printf("close publisher: %v", cerr)
+	}
+	if db != nil {
+		db.Close()
 	}
 	if err != nil {
 		log.Fatalf("server error: %v", err)
