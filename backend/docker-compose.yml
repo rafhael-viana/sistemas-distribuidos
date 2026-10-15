@@ -1,0 +1,128 @@
+# Sobe o Kafka e todos os microsserviços:
+#   docker compose up --build
+#
+# Portas no host: api 8080, auth 8081, notification 8082, audit 8083 e
+# Kafka em localhost:9092 (para rodar um serviço fora do compose; mude com
+# KAFKA_HOST_PORT se a porta já estiver em uso).
+
+x-service: &service
+  restart: unless-stopped
+
+x-healthcheck: &healthcheck
+  interval: 5s
+  timeout: 3s
+  retries: 10
+
+services:
+  kafka:
+    image: apache/kafka:4.1.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # INTERNAL atende os containers da rede do compose; EXTERNAL, o host.
+      KAFKA_LISTENERS: INTERNAL://:29092,CONTROLLER://:9093,EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:${KAFKA_HOST_PORT:-9092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "${KAFKA_HOST_PORT:-9092}:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:29092 > /dev/null 2>&1"]
+      <<: *healthcheck
+
+  # Cria o tópico antes dos serviços subirem, para os consumidores não
+  # dependerem do auto-create disparado pela primeira publicação.
+  kafka-init:
+    image: apache/kafka:4.1.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint:
+      - /opt/kafka/bin/kafka-topics.sh
+      - --bootstrap-server=kafka:29092
+      - --create
+      - --if-not-exists
+      - --topic=auth.events
+      - --partitions=3
+      - --replication-factor=1
+    restart: "no"
+
+  auth:
+    <<: *service
+    build:
+      context: .
+      args:
+        SERVICE: auth
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      AUTH_PORT: "8081"
+      KAFKA_BROKERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]
+      <<: *healthcheck
+
+  notification:
+    <<: *service
+    build:
+      context: .
+      args:
+        SERVICE: notification
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      NOTIFICATION_PORT: "8082"
+      KAFKA_BROKERS: kafka:29092
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/health"]
+      <<: *healthcheck
+
+  audit:
+    <<: *service
+    build:
+      context: .
+      args:
+        SERVICE: audit
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      AUDIT_PORT: "8083"
+      KAFKA_BROKERS: kafka:29092
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/health"]
+      <<: *healthcheck
+
+  api:
+    <<: *service
+    build:
+      context: .
+      args:
+        SERVICE: api
+    depends_on:
+      auth:
+        condition: service_healthy
+    environment:
+      API_PORT: "8080"
+      AUTH_SERVICE_URL: http://auth:8081
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      <<: *healthcheck
