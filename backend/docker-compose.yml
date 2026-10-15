@@ -1,15 +1,14 @@
-# Sobe o Kafka e todos os microsserviços:
+# Sobe o Kafka e todos os microsserviços (veja o README):
+#   cp .env.example .env
 #   docker compose up --build
 #
 # Portas no host: api 8080, auth 8081, notification 8082, audit 8083,
-# report 8084 e
-# Kafka em localhost:9092 (para rodar um serviço fora do compose; mude com
+# report 8084 e Kafka 9092 (para rodar um serviço fora do compose; mude com
 # KAFKA_HOST_PORT se a porta já estiver em uso).
 #
-# Banco de dados (copie .env.example para .env antes; veja o README):
-# DB_DRIVER=memory (padrão) mantém tudo em
-# memória; DB_DRIVER=postgres sobe também o Postgres (porta 5432 no host) e
-# cada serviço usa o próprio banco nele:
+# Banco de dados: DB_DRIVER=memory (padrão) mantém tudo em memória;
+# DB_DRIVER=postgres sobe também o Postgres (porta 5432 no host) e cada
+# serviço usa o próprio banco nele:
 #   DB_DRIVER=postgres docker compose up --build
 
 x-service: &service
