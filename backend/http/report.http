@@ -1,0 +1,41 @@
+### Pede relatório de usuários em PDF -> 202 (gerado de forma assíncrona)
+POST http://localhost:8084/api/v1/reports
+Content-Type: application/json
+
+{
+  "type": "users",
+  "format": "pdf"
+}
+
+# @lang=lua
+> {%
+  local body = vim.json.decode(response.body)
+  client.global.set("report_id", body.id)
+%}
+
+### Pede relatório de tentativas de login em CSV -> 202
+POST http://localhost:8084/api/v1/reports
+Content-Type: application/json
+
+{
+  "type": "logins",
+  "format": "csv"
+}
+
+### Tipo inválido -> 400
+POST http://localhost:8084/api/v1/reports
+Content-Type: application/json
+
+{
+  "type": "vendas",
+  "format": "pdf"
+}
+
+### Lista os relatórios
+GET http://localhost:8084/api/v1/reports
+
+### Status de um relatório (pending, done ou failed)
+GET http://localhost:8084/api/v1/reports/{{report_id}}
+
+### Baixa o arquivo (409 enquanto não estiver pronto)
+GET http://localhost:8084/api/v1/reports/{{report_id}}/download

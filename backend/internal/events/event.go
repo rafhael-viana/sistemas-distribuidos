@@ -55,3 +55,15 @@ type LoginFailed struct {
 	Login  string `json:"login"` // email ou username informado
 	Reason string `json:"reason"`
 }
+
+// TopicReport recebe os pedidos de geração de relatório. Qualquer serviço
+// pode publicar nele; o gerador de relatórios consome.
+const TopicReport = "report.events"
+
+const TypeReportRequested = "report.requested"
+
+type ReportRequested struct {
+	ReportID string `json:"report_id"`
+	Type     string `json:"type"`   // users, logins
+	Format   string `json:"format"` // pdf, csv
+}

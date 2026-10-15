@@ -1,7 +1,8 @@
 # Sobe o Kafka e todos os microsserviços:
 #   docker compose up --build
 #
-# Portas no host: api 8080, auth 8081, notification 8082, audit 8083 e
+# Portas no host: api 8080, auth 8081, notification 8082, audit 8083,
+# report 8084 e
 # Kafka em localhost:9092 (para rodar um serviço fora do compose; mude com
 # KAFKA_HOST_PORT se a porta já estiver em uso).
 
@@ -37,7 +38,7 @@ services:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:29092 > /dev/null 2>&1"]
       <<: *healthcheck
 
-  # Cria o tópico antes dos serviços subirem, para os consumidores não
+  # Cria os tópicos antes dos serviços subirem, para os consumidores não
   # dependerem do auto-create disparado pela primeira publicação.
   kafka-init:
     image: apache/kafka:4.1.0
@@ -45,13 +46,14 @@ services:
       kafka:
         condition: service_healthy
     entrypoint:
-      - /opt/kafka/bin/kafka-topics.sh
-      - --bootstrap-server=kafka:29092
-      - --create
-      - --if-not-exists
-      - --topic=auth.events
-      - --partitions=3
-      - --replication-factor=1
+      - sh
+      - -c
+      - |
+        set -e
+        for topic in auth.events report.events; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server=kafka:29092 \
+            --create --if-not-exists --topic="$$topic" --partitions=3 --replication-factor=1
+        done
     restart: "no"
 
   auth:
@@ -109,6 +111,27 @@ services:
       test: ["CMD", "wget", "-qO-", "http://localhost:8083/health"]
       <<: *healthcheck
 
+  report:
+    <<: *service
+    build:
+      context: .
+      args:
+        SERVICE: report
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      REPORT_PORT: "8084"
+      KAFKA_BROKERS: kafka:29092
+      REPORTS_DIR: /data/reports
+    volumes:
+      - reports:/data
+    ports:
+      - "8084:8084"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/health"]
+      <<: *healthcheck
+
   api:
     <<: *service
     build:
@@ -126,3 +149,6 @@ services:
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       <<: *healthcheck
+
+volumes:
+  reports:

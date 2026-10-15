@@ -16,6 +16,7 @@ type Config struct {
 	TokenTTL        time.Duration
 	AuthServiceURL  string
 	KafkaBrokers    []string
+	ReportsDir      string
 }
 
 // Load lê a configuração do ambiente. Cada serviço informa a variável de
@@ -31,6 +32,7 @@ func Load(portEnv, defaultPort string) Config {
 		TokenTTL:        24 * time.Hour,
 		AuthServiceURL:  getEnv("AUTH_SERVICE_URL", "http://localhost:8081"),
 		KafkaBrokers:    strings.Split(getEnv("KAFKA_BROKERS", "localhost:9092"), ","),
+		ReportsDir:      getEnv("REPORTS_DIR", "data/reports"),
 	}
 }
 

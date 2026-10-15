@@ -21,7 +21,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service ./cmd/${SE
 FROM alpine:3.22
 
 # wget já vem no busybox e é usado pelo healthcheck do compose.
-RUN adduser -D -H -u 10001 app
+# /data é do usuário app para o volume dos relatórios herdar a permissão.
+RUN adduser -D -H -u 10001 app && mkdir /data && chown app /data
 USER app
 
 COPY --from=build /out/service /usr/local/bin/service
