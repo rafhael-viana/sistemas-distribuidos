@@ -42,6 +42,9 @@ services:
 
   kafka:
     image: apache/kafka:4.1.0
+    # Nome fixo: o Kafka resolve o próprio hostname ao subir e, com o ID
+    # aleatório do container, a resolução pode falhar (UnknownHostException).
+    hostname: kafka
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
