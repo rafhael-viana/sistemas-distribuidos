@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Lock, User } from 'lucide-react'
 import { AuthArt } from '../../components/AuthArt'
 import { Logo } from '../../components/Logo'
-import { useAuth } from '../../context/AuthContext'
+import { canAccess, homeFor, useAuth, type Area } from '../../context/AuthContext'
 import { translateAuthError } from '../../api/auth'
 import { ApiError } from '../../api/client'
 
@@ -23,9 +23,11 @@ export function Login() {
     setError('')
     setLoading(true)
     try {
-      await login(form.login.trim(), form.password, remember)
+      const user = await login(form.login.trim(), form.password, remember)
       const from = (location.state as { from?: string } | null)?.from
-      navigate(onboarded ? (from ?? '/app') : '/onboarding', { replace: true })
+      const fromArea = from?.split('/')[1] as Area | undefined
+      const home = homeFor(user, onboarded)
+      navigate(from && fromArea && canAccess(user, fromArea) && !home.startsWith('/onboarding') ? from : home, { replace: true })
     } catch (err) {
       setError(err instanceof ApiError ? translateAuthError(err.message) : 'Erro inesperado.')
     } finally {

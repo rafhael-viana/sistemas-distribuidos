@@ -89,6 +89,24 @@ docker compose exec postgres psql -U tcc -d auth -c 'select * from users'
 > precisar de banco, recrie o volume (`docker compose down -v`) ou crie o
 > banco manualmente.
 
+## Perfis e contas iniciais
+
+Cada usuário tem um perfil (`role`): `profissional` (colaborador), `gestao`
+(RH) ou `admin` (todas as áreas). O cadastro público sempre cria
+`profissional`; contas de gestão e admin vêm do arquivo de seed.
+
+Ao subir, o `auth` lê `seed/users.json` (montado em `/seed` pelo compose) e
+cria as contas que ainda não existem. O arquivo fica fora do git; use
+`seed/users.example.json` como modelo:
+
+```sh
+cp seed/users.example.json seed/users.json   # edite nomes, e-mails e senhas
+docker compose up -d --build auth
+```
+
+Como o seed roda em toda inicialização, as contas voltam mesmo no modo
+memória. O perfil também vai no token JWT (claim `role`).
+
 ## Variáveis de ambiente
 
 Definidas no `.env` (veja `.env.example`) ou na linha de comando:
@@ -96,6 +114,7 @@ Definidas no `.env` (veja `.env.example`) ou na linha de comando:
 | Variável             | Padrão                 | Uso                                                    |
 | -------------------- | ---------------------- | ------------------------------------------------------ |
 | `DB_DRIVER`          | `memory`               | `memory` ou `postgres`                                 |
+| `AUTH_SEED_FILE`     | (vazio)                | JSON com contas iniciais do `auth` (compose: `/seed/users.json`) |
 | `JWT_SECRET`         | `dev-secret-change-me` | Chave de assinatura dos tokens do `auth`               |
 | `KAFKA_HOST_PORT`    | `9092`                 | Porta do Kafka no host (mude se a 9092 estiver em uso) |
 | `POSTGRES_HOST_PORT` | `5432`                 | Porta do Postgres no host                              |

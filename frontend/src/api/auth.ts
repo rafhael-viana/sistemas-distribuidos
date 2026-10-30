@@ -1,10 +1,14 @@
 import { request } from './client'
 
+export type Role = 'profissional' | 'gestao' | 'admin'
+
 export interface User {
   id: string
   name: string
   username: string
   email: string
+  // Contas salvas antes da criação dos perfis não têm role: valem como profissional.
+  role?: Role
   created_at: string
 }
 

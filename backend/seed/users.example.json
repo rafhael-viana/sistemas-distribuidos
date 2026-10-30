@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Gestora Exemplo",
+    "username": "gestao",
+    "email": "gestao@mindsync.local",
+    "password": "troque-esta-senha",
+    "role": "gestao"
+  },
+  {
+    "name": "Admin Exemplo",
+    "username": "admin",
+    "email": "admin@mindsync.local",
+    "password": "troque-esta-senha",
+    "role": "admin"
+  }
+]

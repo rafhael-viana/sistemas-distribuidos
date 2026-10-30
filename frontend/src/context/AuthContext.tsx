@@ -8,7 +8,7 @@ const ONBOARDING_KEY = 'mindsync.onboarding'
 interface AuthContextValue {
   user: authApi.User | null
   onboarded: boolean
-  login: (login: string, password: string, remember: boolean) => Promise<void>
+  login: (login: string, password: string, remember: boolean) => Promise<authApi.User>
   register: (input: authApi.RegisterInput) => Promise<void>
   logout: () => void
   finishOnboarding: () => void
@@ -35,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storage = remember ? localStorage : sessionStorage
     storage.setItem(USER_KEY, JSON.stringify(res.user))
     setUser(res.user)
+    return res.user
   }, [])
 
   // O cadastro não devolve token, então logamos logo em seguida.
@@ -84,4 +85,33 @@ export function initials(name: string) {
 
 export function firstName(name: string) {
   return name.split(/\s+/)[0] ?? name
+}
+
+export type Area = 'app' | 'gestao' | 'clientes' | 'dev'
+
+const AREAS: Record<authApi.Role, Area[]> = {
+  profissional: ['app'],
+  gestao: ['gestao', 'clientes'],
+  admin: ['gestao', 'clientes', 'dev', 'app'],
+}
+
+export const ROLE_LABEL: Record<authApi.Role, string> = {
+  profissional: 'Profissional',
+  gestao: 'Gestão de RH',
+  admin: 'Administrador',
+}
+
+export function roleOf(user: authApi.User | null): authApi.Role {
+  return user?.role ?? 'profissional'
+}
+
+export function canAccess(user: authApi.User | null, area: Area) {
+  return AREAS[roleOf(user)].includes(area)
+}
+
+// Página inicial de cada perfil após o login.
+export function homeFor(user: authApi.User | null, onboarded: boolean) {
+  const role = roleOf(user)
+  if (role === 'profissional') return onboarded ? '/app' : '/onboarding'
+  return '/gestao'
 }

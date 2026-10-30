@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"log"
+	"os"
 
 	"github.com/rafhael-viana/TCC/internal/auth/handler"
 	"github.com/rafhael-viana/TCC/internal/auth/repository"
@@ -36,6 +37,11 @@ func main() {
 	}
 
 	authService := service.NewAuthService(users, publisher, cfg.JWTSecret, cfg.TokenTTL)
+	if path := os.Getenv("AUTH_SEED_FILE"); path != "" {
+		if err := authService.SeedFromFile(context.Background(), path); err != nil {
+			log.Fatal(err)
+		}
+	}
 	authHandler := handler.NewAuthHandler(authService)
 
 	srv := server.New(cfg, router.New(authHandler))

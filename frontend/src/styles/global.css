@@ -288,3 +288,7 @@ button { cursor: pointer; }
 /* Modal */
 .overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: grid; place-items: center; padding: 16px; z-index: 50; }
 .overlay .modal-card { max-width: 460px; }
+
+.area-switch { width: 100%; margin-bottom: 14px; height: 32px; border-radius: 8px; border: 1px solid #2b2540; background: transparent; color: inherit; font-size: 12px; padding: 0 10px; }
+.area-switch option { color: var(--text); }
+.shell.light .area-switch { border-color: var(--border); }

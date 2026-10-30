@@ -9,7 +9,7 @@ const NAV: NavItem[] = [
 ]
 
 export function ClientsLayout() {
-  return <AppLayout nav={NAV} role="Sessão Ativa" fallbackName="Operador Master" variant="light" backTo="/gestao/usuarios" />
+  return <AppLayout nav={NAV} variant="light" backTo="/gestao/usuarios" />
 }
 
 // Abas no topo das telas 5.1, 5.2 e 5.3.

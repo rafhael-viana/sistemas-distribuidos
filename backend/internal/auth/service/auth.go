@@ -48,6 +48,12 @@ type AuthResult struct {
 	User      *model.User `json:"user"`
 }
 
+// Claims são as informações gravadas no token JWT.
+type Claims struct {
+	Role model.Role `json:"role"`
+	jwt.RegisteredClaims
+}
+
 // EventPublisher publica eventos de domínio (ex.: no Kafka). key define a
 // partição, garantindo a ordem dos eventos de um mesmo usuário.
 type EventPublisher interface {
@@ -65,7 +71,29 @@ func NewAuthService(users repository.UserRepository, publisher EventPublisher, s
 	return &AuthService{users: users, events: publisher, secret: []byte(secret), tokenTTL: tokenTTL}
 }
 
+// Register cria uma conta pelo cadastro público, sempre como profissional.
 func (s *AuthService) Register(ctx context.Context, in RegisterInput) (*model.User, error) {
+	return s.create(ctx, in, model.RoleProfissional)
+}
+
+// EnsureUser cria a conta com o perfil informado se o e-mail ainda não
+// existir. É usado na carga inicial (seed) de contas de gestão e admin.
+func (s *AuthService) EnsureUser(ctx context.Context, in RegisterInput, role model.Role) (*model.User, bool, error) {
+	if !role.Valid() {
+		return nil, false, &ValidationError{fmt.Sprintf("invalid role %q", role)}
+	}
+	u, err := s.users.FindByEmail(ctx, strings.ToLower(strings.TrimSpace(in.Email)))
+	if err == nil {
+		return u, false, nil
+	}
+	if !errors.Is(err, repository.ErrUserNotFound) {
+		return nil, false, err
+	}
+	u, err = s.create(ctx, in, role)
+	return u, err == nil, err
+}
+
+func (s *AuthService) create(ctx context.Context, in RegisterInput, role model.Role) (*model.User, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Username = strings.TrimSpace(in.Username)
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
@@ -95,6 +123,7 @@ func (s *AuthService) Register(ctx context.Context, in RegisterInput) (*model.Us
 		Name:         in.Name,
 		Username:     in.Username,
 		Email:        in.Email,
+		Role:         role,
 		PasswordHash: string(hash),
 		CreatedAt:    time.Now().UTC(),
 	}
@@ -140,10 +169,13 @@ func (s *AuthService) Login(ctx context.Context, in LoginInput) (*AuthResult, er
 	}
 
 	expiresAt := time.Now().Add(s.tokenTTL)
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
-		Subject:   u.ID,
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		ExpiresAt: jwt.NewNumericDate(expiresAt),
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
+		Role: u.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   u.ID,
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+		},
 	}).SignedString(s.secret)
 	if err != nil {
 		return nil, fmt.Errorf("sign token: %w", err)

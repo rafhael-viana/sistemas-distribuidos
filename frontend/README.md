@@ -50,12 +50,23 @@ suba os microsserviços antes (`backend/README.md`):
 | `/dev`                             | Gestão de tenants/empresas                        |
 | `/dev/logs`                        | Logs técnicos & rastreamento de erros             |
 
+## Perfis
+
+O perfil vem do login (`user.role`) e define as áreas acessíveis:
+
+| Perfil         | Áreas                                         | Após o login             |
+| -------------- | --------------------------------------------- | ------------------------ |
+| `profissional` | `/app`                                        | `/onboarding` ou `/app`  |
+| `gestao`       | `/gestao`, `/clientes`                        | `/gestao`                |
+| `admin`        | todas, com seletor de área na barra lateral   | `/gestao`                |
+
+Contas de gestão e admin são criadas pelo seed do backend (`backend/README.md`).
+
 ## O que ainda é mock
 
-O backend ainda não tem perfis (colaborador, RH, dev) nem APIs de check-in,
-usuários, mensagens, clientes ou tenants. Por isso:
+O backend ainda não tem APIs de check-in, usuários, mensagens, clientes ou
+tenants. Por isso:
 
-- qualquer usuário logado acessa `/app`, `/gestao`, `/clientes` e `/dev`;
 - os dados dessas telas ficam em memória ou no `localStorage` do navegador;
 - o cadastro gera o `username` a partir do e-mail, e o código de convite não é
   enviado;

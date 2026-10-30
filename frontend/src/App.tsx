@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useAuth } from './context/AuthContext'
+import { canAccess, homeFor, useAuth, type Area } from './context/AuthContext'
 import { AppLayout, EnvBox } from './components/AppLayout'
 import { Landing } from './pages/public/Landing'
 import { Login } from './pages/public/Login'
@@ -32,17 +32,20 @@ import { DEV_NAV } from './pages/dev/nav'
 import { Tenants } from './pages/dev/Tenants'
 import { Logs } from './pages/dev/Logs'
 
-function RequireAuth({ children, onboarding = false }: { children: ReactNode; onboarding?: boolean }) {
+// RequireAuth exige login e, quando area é informada, que o perfil tenha acesso a ela.
+function RequireAuth({ children, area }: { children: ReactNode; area?: Area }) {
   const { user, onboarded } = useAuth()
   const location = useLocation()
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
-  if (onboarding && !onboarded) return <Navigate to="/onboarding" replace />
+  if (area && !canAccess(user, area)) return <Navigate to={homeFor(user, onboarded)} replace />
+  // O onboarding é do colaborador: só bloqueia a área /app.
+  if (area === 'app' && !onboarded && user.role !== 'admin') return <Navigate to="/onboarding" replace />
   return children
 }
 
 function PublicOnly({ children }: { children: ReactNode }) {
   const { user, onboarded } = useAuth()
-  if (user) return <Navigate to={onboarded ? '/app' : '/onboarding'} replace />
+  if (user) return <Navigate to={homeFor(user, onboarded)} replace />
   return children
 }
 
@@ -58,8 +61,8 @@ export function App() {
       <Route
         path="/app"
         element={
-          <RequireAuth onboarding>
-            <AppLayout nav={USER_NAV} role="Engenheira de Software" fallbackName="Camila Silva" />
+          <RequireAuth area="app">
+            <AppLayout nav={USER_NAV} />
           </RequireAuth>
         }
       >
@@ -76,8 +79,8 @@ export function App() {
       <Route
         path="/gestao"
         element={
-          <RequireAuth>
-            <AppLayout nav={ADMIN_NAV} role="Gestão de RH" fallbackName="Mariana Costa" />
+          <RequireAuth area="gestao">
+            <AppLayout nav={ADMIN_NAV} />
           </RequireAuth>
         }
       >
@@ -93,7 +96,7 @@ export function App() {
       </Route>
 
       {/* Cadastro de clientes (fluxo 5.x, aberto a partir de "Cadastrar usuários") */}
-      <Route path="/clientes" element={<RequireAuth><ClientsLayout /></RequireAuth>}>
+      <Route path="/clientes" element={<RequireAuth area="clientes"><ClientsLayout /></RequireAuth>}>
         <Route index element={<ClientsList />} />
         <Route path="pessoa-fisica" element={<ClientPF />} />
         <Route path="pessoa-juridica" element={<ClientPJ />} />
@@ -103,8 +106,8 @@ export function App() {
       <Route
         path="/dev"
         element={
-          <RequireAuth>
-            <AppLayout nav={DEV_NAV} role="Dev/Engenharia" fallbackName="Rafael Lima" sectionLabel="Desenvolvimento" sidebarExtra={<EnvBox />} internalNote />
+          <RequireAuth area="dev">
+            <AppLayout nav={DEV_NAV} sectionLabel="Desenvolvimento" sidebarExtra={<EnvBox />} internalNote />
           </RequireAuth>
         }
       >

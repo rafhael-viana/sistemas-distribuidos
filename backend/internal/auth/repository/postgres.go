@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
 	password_hash TEXT NOT NULL,
 	created_at    TIMESTAMPTZ NOT NULL
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'profissional';
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (lower(email));
 CREATE UNIQUE INDEX IF NOT EXISTS users_username_key ON users (lower(username));
 `
@@ -37,9 +38,9 @@ func NewPostgresUserRepository(db *pgxpool.Pool) *PostgresUserRepository {
 
 func (r *PostgresUserRepository) Create(ctx context.Context, u *model.User) error {
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO users (id, name, username, email, password_hash, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		u.ID, u.Name, u.Username, u.Email, u.PasswordHash, u.CreatedAt)
+		`INSERT INTO users (id, name, username, email, role, password_hash, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		u.ID, u.Name, u.Username, u.Email, u.Role, u.PasswordHash, u.CreatedAt)
 
 	if constraint, ok := database.IsUniqueViolation(err); ok {
 		switch constraint {
@@ -66,8 +67,8 @@ func (r *PostgresUserRepository) FindByUsername(ctx context.Context, username st
 func (r *PostgresUserRepository) find(ctx context.Context, where string, arg string) (*model.User, error) {
 	var u model.User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, name, username, email, password_hash, created_at FROM users WHERE `+where, arg,
-	).Scan(&u.ID, &u.Name, &u.Username, &u.Email, &u.PasswordHash, &u.CreatedAt)
+		`SELECT id, name, username, email, role, password_hash, created_at FROM users WHERE `+where, arg,
+	).Scan(&u.ID, &u.Name, &u.Username, &u.Email, &u.Role, &u.PasswordHash, &u.CreatedAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound
