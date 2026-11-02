@@ -1,13 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { PageHeader } from '../../components/PageHeader'
+import { listTeams, type Team } from '../../api/org'
+import { useTenantScope } from '../../context/TenantScope'
 
-const TEAMS = ['Todas', 'Engenharia de Software', 'Produto & UI/UX', 'Infraestrutura', 'Marketing']
 const PERIODS = ['Últimos 7 dias', 'Últimos 30 dias', 'Últimos 90 dias']
 const WEEK = [62, 68, 78, 74, 76, 40, 46]
 
 export function AdminDashboard() {
-  const [team, setTeam] = useState('Todas')
+  const { tenantId, isAdmin } = useTenantScope()
+  const [teams, setTeams] = useState<Team[]>([])
+  const [team, setTeam] = useState('')
+  useEffect(() => {
+    if (tenantId) listTeams(isAdmin ? tenantId : undefined).then(setTeams).catch(() => setTeams([]))
+  }, [tenantId, isAdmin])
   const [period, setPeriod] = useState('Últimos 30 dias')
 
   return (
@@ -34,7 +40,8 @@ export function AdminDashboard() {
       <div className="row between mt-16 gap-12">
         <div className="row gap-8">
           <select className="select" style={{ width: 'auto', height: 32, fontSize: 12, fontWeight: 600 }} value={team} onChange={(e) => setTeam(e.target.value)}>
-            {TEAMS.map((t) => <option key={t} value={t}>Equipes: {t}</option>)}
+            <option value="">Equipes: Todas</option>
+            {teams.map((t) => <option key={t.id} value={t.id}>Equipes: {t.name}</option>)}
           </select>
           <select className="select" style={{ width: 'auto', height: 32, fontSize: 12, fontWeight: 600 }} value={period} onChange={(e) => setPeriod(e.target.value)}>
             {PERIODS.map((p) => <option key={p} value={p}>Período: {p}</option>)}

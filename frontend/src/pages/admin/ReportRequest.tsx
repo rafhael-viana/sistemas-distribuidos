@@ -1,15 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Bell, Calendar, FileText, ShieldCheck } from 'lucide-react'
 import { PageHeader } from '../../components/PageHeader'
 import { requestReport, type ReportFormat } from '../../api/reports'
+import { listTeams, type Team } from '../../api/org'
+import { useTenantScope } from '../../context/TenantScope'
 import { ApiError } from '../../api/client'
 
 const PERIODS = ['Últimos 7 dias', 'Últimos 30 dias', 'Últimos 90 dias', 'Último ano']
-const TEAMS = ['Engenharia de Software', 'Produto & UI/UX', 'Infraestrutura', 'Recursos Humanos', 'Marketing']
 
 export function ReportRequest() {
   const navigate = useNavigate()
+  const { tenantId, isAdmin } = useTenantScope()
+  const [allTeams, setAllTeams] = useState<Team[]>([])
   const [period, setPeriod] = useState('Últimos 30 dias')
   const [stress, setStress] = useState(true)
   const [engagement, setEngagement] = useState(true)
@@ -18,6 +21,11 @@ export function ReportRequest() {
   const [format, setFormat] = useState<ReportFormat>('pdf')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (tenantId) listTeams(isAdmin ? tenantId : undefined).then(setAllTeams).catch(() => setAllTeams([]))
+  }, [tenantId, isAdmin])
+  const teamNames = allTeams.filter((t) => teams.includes(t.id)).map((t) => t.name)
 
   const indicators = [stress && 'Estresse ocupacional', engagement && 'engajamento'].filter(Boolean).join(' e ')
 
@@ -28,9 +36,14 @@ export function ReportRequest() {
       // O serviço de relatórios hoje gera "users" (usuários + resumo de logins) e
       // "logins" (tentativas de acesso). Só engajamento -> logins; o resto -> users.
       const type = engagement && !stress ? 'logins' : 'users'
-      const report = await requestReport(type, format)
+      const report = await requestReport({
+        type,
+        format,
+        team_ids: scope === 'teams' ? teams : undefined,
+        tenant_id: isAdmin ? tenantId : undefined,
+      })
       navigate(`/gestao/relatorios/gerando/${report.id}`, {
-        state: { period, indicators, scope: scope === 'org' ? 'Toda a organização' : teams.join(', '), format },
+        state: { period, indicators, scope: scope === 'org' ? 'Toda a organização' : teamNames.join(', '), format },
       })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro inesperado.')
@@ -77,9 +90,12 @@ export function ReportRequest() {
           </div>
           {scope === 'teams' && (
             <div className="chips mt-12">
-              {TEAMS.map((t) => (
-                <button key={t} className={`chip${teams.includes(t) ? ' active' : ''}`} onClick={() => setTeams(teams.includes(t) ? teams.filter((x) => x !== t) : [...teams, t])}>{t}</button>
+              {allTeams.map((t) => (
+                <button key={t.id} className={`chip${teams.includes(t.id) ? ' active' : ''}`} onClick={() => setTeams(teams.includes(t.id) ? teams.filter((x) => x !== t.id) : [...teams, t.id])}>
+                  {t.name} <span className="muted">({t.members_count})</span>
+                </button>
               ))}
+              {allTeams.length === 0 && <span className="xs muted">Nenhuma equipe cadastrada. Crie em Usuários e Equipes.</span>}
             </div>
           )}
           <p className="xs muted mt-12">Somente grupos com pelo menos 5 participantes serão exibidos. Grupos abaixo desse limiar serão omitidos para preservar o anonimato.</p>
@@ -101,7 +117,7 @@ export function ReportRequest() {
             <div className="stack gap-12">
               <Summary label="Período" value={period} />
               <Summary label="Indicadores" value={indicators || '—'} />
-              <Summary label="Abrangência" value={scope === 'org' ? 'Toda a organização' : teams.join(', ') || 'Nenhuma equipe'} />
+              <Summary label="Abrangência" value={scope === 'org' ? 'Toda a organização' : teamNames.join(', ') || 'Nenhuma equipe'} />
               <Summary label="Formato" value={format === 'pdf' ? 'PDF · Relatório consolidado' : 'CSV · Dados agregados'} />
             </div>
             <hr className="divider" style={{ margin: '14px 0' }} />

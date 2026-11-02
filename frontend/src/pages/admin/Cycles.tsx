@@ -1,26 +1,41 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { PageHeader } from '../../components/PageHeader'
+import { listTeams, listUsers, type Team } from '../../api/org'
+import { useTenantScope } from '../../context/TenantScope'
 
 const DIMENSIONS = [
   { key: 'Sobrecarga', summary: 'Sobrecarga', label: 'Carga de Trabalho (Escala de Estresse de Carga)' },
   { key: 'Ergonomia', summary: 'Ergonomia, Conforto', label: 'Ergonomia e Conforto Postural' },
   { key: 'Technostress', summary: 'Technostress', label: 'Technostress (Indicador de Fadiga Tecnológica)' },
 ]
-const ALL_TEAMS = ['Equipe de Infraestrutura', 'Squad DevOps', 'Engenharia de Software', 'Produto & UI/UX', 'Marketing']
-const PER_TEAM = 21
 
 export function Cycles() {
   const [name, setName] = useState('Mapeamento de Clima e Ergonomia Q2 - Engenharia')
   const [frequency, setFrequency] = useState('Quinzenal')
   const [dims, setDims] = useState(['Sobrecarga', 'Ergonomia'])
   const [scope, setScope] = useState<'teams' | 'org'>('teams')
-  const [teams, setTeams] = useState(['Equipe de Infraestrutura', 'Squad DevOps'])
+  // Equipes e colaboradores reais da empresa (serviço auth).
+  const { tenantId, isAdmin } = useTenantScope()
+  const [allTeams, setAllTeams] = useState<Team[]>([])
+  const [orgSize, setOrgSize] = useState(0)
+  const [teams, setTeams] = useState<string[]>([])
+  useEffect(() => {
+    if (!tenantId) return
+    const scope = isAdmin ? tenantId : undefined
+    listTeams(scope).then(setAllTeams).catch(() => setAllTeams([]))
+    listUsers({ tenantId: scope })
+      .then((us) => setOrgSize(us.filter((u) => u.active !== false).length))
+      .catch(() => setOrgSize(0))
+    setTeams([])
+  }, [tenantId, isAdmin])
+  const teamName = (id: string) => allTeams.find((t) => t.id === id)?.name ?? id
   const [imported, setImported] = useState(0)
   const [status, setStatus] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const respondents = scope === 'org' ? 142 : teams.length * PER_TEAM + imported
+  const respondents =
+    (scope === 'org' ? orgSize : allTeams.filter((t) => teams.includes(t.id)).reduce((n, t) => n + t.members_count, 0)) + imported
   const dimLabel = DIMENSIONS.filter((d) => dims.includes(d.key)).map((d) => d.summary)
 
   async function importCSV(file: File) {
@@ -74,13 +89,13 @@ export function Cycles() {
             <div className="row gap-8 mt-12" style={{ flexWrap: 'wrap', border: '1px solid var(--border)', borderRadius: 8, padding: 8, background: '#f8fafc' }}>
               {teams.map((t) => (
                 <span key={t} className="row gap-4 xs" style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', fontWeight: 600 }}>
-                  {t}
-                  <button className="icon-btn" style={{ padding: 0 }} onClick={() => setTeams(teams.filter((x) => x !== t))} aria-label={`Remover ${t}`}><X size={12} /></button>
+                  {teamName(t)}
+                  <button className="icon-btn" style={{ padding: 0 }} onClick={() => setTeams(teams.filter((x) => x !== t))} aria-label={`Remover ${teamName(t)}`}><X size={12} /></button>
                 </span>
               ))}
               <select className="select" style={{ width: 'auto', height: 28, fontSize: 12, border: 0, background: 'transparent' }} value="" onChange={(e) => e.target.value && setTeams([...teams, e.target.value])}>
-                <option value="">+ adicionar equipe</option>
-                {ALL_TEAMS.filter((t) => !teams.includes(t)).map((t) => <option key={t}>{t}</option>)}
+                <option value="">{allTeams.length ? '+ adicionar equipe' : 'Nenhuma equipe cadastrada'}</option>
+                {allTeams.filter((t) => !teams.includes(t.id)).map((t) => <option key={t.id} value={t.id}>{t.name} ({t.members_count})</option>)}
               </select>
             </div>
           )}

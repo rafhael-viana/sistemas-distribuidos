@@ -9,6 +9,9 @@ export interface User {
   email: string
   // Contas salvas antes da criação dos perfis não têm role: valem como profissional.
   role?: Role
+  tenant_id?: string
+  team_id?: string
+  active?: boolean
   created_at: string
 }
 
@@ -23,6 +26,7 @@ export interface RegisterInput {
   username: string
   email: string
   password: string
+  invite_code?: string
 }
 
 export function login(login: string, password: string) {
@@ -30,6 +34,10 @@ export function login(login: string, password: string) {
     method: 'POST',
     body: JSON.stringify({ login, password }),
   })
+}
+
+export function me() {
+  return request<User>('/api/v1/auth/me')
 }
 
 export function register(input: RegisterInput) {
@@ -51,6 +59,14 @@ export function translateAuthError(msg: string) {
     'password must have at most 72 bytes': 'A senha é longa demais.',
     'email already in use': 'Este e-mail já está cadastrado.',
     'username already in use': 'Este nome de usuário já está em uso.',
+    'user is inactive': 'Sua conta está inativa. Procure o RH da sua empresa.',
+    'organization is suspended': 'O acesso da sua empresa está suspenso.',
+    'organization user limit reached': 'Sua empresa atingiu o limite de colaboradores do plano.',
+    'invalid invite code': 'Código de convite inválido.',
+    'no organization for this email domain: use an invite code':
+      'Nenhuma empresa usa o domínio deste e-mail. Informe o código de convite.',
+    'email domain not allowed for this organization': 'O domínio deste e-mail não é permitido pela sua empresa.',
+    'invalid or expired token': 'Sua sessão expirou. Entre novamente.',
   }
   return map[msg] ?? msg
 }

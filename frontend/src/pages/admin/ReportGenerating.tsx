@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { CheckCircle2, XCircle } from 'lucide-react'
-import { downloadURL, getReport, type Report } from '../../api/reports'
+import { downloadReport, getReport, type Report } from '../../api/reports'
 
 const STAGES = ['Coletando check-ins', 'Compilando respostas', 'Aplicando anonimização', 'Gerando arquivo']
 
@@ -73,7 +73,11 @@ export function ReportGenerating() {
         )}
 
         <div className="row gap-8 mt-16" style={{ justifyContent: 'center' }}>
-          {done && report && <a className="btn btn-primary btn-sm btn-square" href={downloadURL(report.id)}>Baixar {report.format.toUpperCase()}</a>}
+          {done && report && (
+            <button className="btn btn-primary btn-sm btn-square" onClick={() => downloadReport(report).catch(() => setError('Não foi possível baixar o arquivo.'))}>
+              Baixar {report.format.toUpperCase()}
+            </button>
+          )}
           <button className="btn btn-outline btn-sm btn-square" onClick={() => navigate('/gestao/relatorios')}>
             {done ? 'Ver relatórios' : 'Voltar ao início'}
           </button>

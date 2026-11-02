@@ -11,15 +11,9 @@ npm run dev        # http://localhost:5173
 npm run build      # gera dist/
 ```
 
-O Vite repassa as chamadas de API para o backend (veja `vite.config.ts`), então
-suba os microsserviços antes (`backend/README.md`):
-
-| Caminho                 | Serviço        | Porta |
-| ----------------------- | -------------- | ----- |
-| `/api/v1/auth`          | gateway (auth) | 8080  |
-| `/api/v1/reports`       | report         | 8084  |
-| `/api/v1/audit`         | audit          | 8083  |
-| `/api/v1/notifications` | notification   | 8082  |
+O Vite repassa toda a API (`/api`) para o gateway na porta 8080
+(`vite.config.ts`), que encaminha para cada microsserviço. Suba o backend
+antes (`backend/README.md`).
 
 ## Telas e fluxos
 
@@ -62,14 +56,33 @@ O perfil vem do login (`user.role`) e define as áreas acessíveis:
 
 Contas de gestão e admin são criadas pelo seed do backend (`backend/README.md`).
 
+## Integrado ao backend
+
+- **Login, cadastro e sessão.** O cadastro usa o código de convite ou o
+  domínio do e-mail. O app sai sozinho quando o token expira, o usuário é
+  inativado ou a empresa é suspensa.
+- **Empresas (`/dev`).** Criar, editar plano, limites, domínios e convite,
+  suspender, reativar e excluir.
+- **Usuários e equipes (`/gestao/usuarios`).** CRUD completo, com equipe no
+  usuário.
+- **Relatórios.** Por equipe, com download autenticado.
+- **Trilha de auditoria.** Mostra só a empresa do usuário.
+- **Logs técnicos (`/dev/logs`).** Busca, filtros, correlação da requisição
+  entre os serviços e painel de status dos componentes.
+- **Ciclos e dashboard gerencial.** Usam as equipes reais e o total de
+  colaboradores.
+
+O admin escolhe a empresa das telas de gestão no seletor da barra lateral.
+
 ## O que ainda é mock
 
-O backend ainda não tem APIs de check-in, usuários, mensagens, clientes ou
-tenants. Por isso:
+O backend ainda não tem APIs de check-in, ciclos, mensagens preventivas,
+parâmetros nem clientes PF/PJ. Por isso:
 
-- os dados dessas telas ficam em memória ou no `localStorage` do navegador;
-- o cadastro gera o `username` a partir do e-mail, e o código de convite não é
-  enviado;
+- os dados dessas telas ficam em memória ou no `localStorage` do navegador,
+  incluindo os ciclos de pesquisa criados;
+- os indicadores dos dashboards são valores de exemplo;
+- o cadastro gera o `username` a partir do e-mail;
 - em "Solicitar relatório", só engajamento vira `type: "logins"`; qualquer
   outra combinação vira `type: "users"`, que são os tipos que o serviço de
   relatórios aceita hoje.

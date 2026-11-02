@@ -1,8 +1,10 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as authApi from '../api/auth'
-import { setToken } from '../api/client'
+import { getToken, SESSION_ENDED_EVENT, setToken } from '../api/client'
 
 const USER_KEY = 'mindsync.user'
+// Motivo do último logout forçado, exibido na tela de login.
+export const SESSION_MSG_KEY = 'mindsync.sessionMsg'
 const ONBOARDING_KEY = 'mindsync.onboarding'
 
 interface AuthContextValue {
@@ -54,6 +56,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(USER_KEY)
     sessionStorage.removeItem(USER_KEY)
     setUser(null)
+  }, [])
+
+  // Bloqueio (usuário inativado, empresa suspensa) ou token expirado: sai.
+  useEffect(() => {
+    function onEnded(e: Event) {
+      sessionStorage.setItem(SESSION_MSG_KEY, String((e as CustomEvent).detail ?? ''))
+      logout()
+    }
+    window.addEventListener(SESSION_ENDED_EVENT, onEnded)
+    return () => window.removeEventListener(SESSION_ENDED_EVENT, onEnded)
+  }, [logout])
+
+  // Atualiza os dados do usuário (perfil, equipe) ao abrir o app.
+  useEffect(() => {
+    if (!getToken()) return
+    authApi
+      .me()
+      .then((u) => {
+        const storage = localStorage.getItem(USER_KEY) ? localStorage : sessionStorage
+        storage.setItem(USER_KEY, JSON.stringify(u))
+        setUser(u)
+      })
+      .catch(() => {})
   }, [])
 
   const finishOnboarding = useCallback(() => {

@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { PageHeader } from '../../components/PageHeader'
-import { downloadURL, listReports, type Report } from '../../api/reports'
+import { downloadReport, listReports, type Report } from '../../api/reports'
+import { listTeams } from '../../api/org'
+import { useTenantScope } from '../../context/TenantScope'
 
 export const REPORT_TYPE_LABEL: Record<Report['type'], string> = {
   users: 'Relatório Consolidado de Usuários',
@@ -21,11 +23,21 @@ export function Reports() {
   const navigate = useNavigate()
   const [reports, setReports] = useState<Report[] | null>(null)
   const [offline, setOffline] = useState(false)
+  const [error, setError] = useState('')
+  const { tenantId, isAdmin } = useTenantScope()
+  const [teamNames, setTeamNames] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!tenantId) return
+    listTeams(isAdmin ? tenantId : undefined)
+      .then((ts) => setTeamNames(Object.fromEntries(ts.map((t) => [t.id, t.name]))))
+      .catch(() => {})
+  }, [tenantId, isAdmin])
 
   useEffect(() => {
     let alive = true
     const load = () =>
-      listReports()
+      listReports(isAdmin ? tenantId : undefined)
         .then((r) => {
           if (!alive) return
           setReports(r.sort((a, b) => b.created_at.localeCompare(a.created_at)))
@@ -39,7 +51,7 @@ export function Reports() {
       alive = false
       clearInterval(t)
     }
-  }, [])
+  }, [tenantId, isAdmin])
 
   return (
     <>
@@ -52,9 +64,10 @@ export function Reports() {
           </button>
         }
       />
+      {error && <div className="error-msg" style={{ marginBottom: 16 }}>{error}</div>}
       {offline && (
         <div className="error-msg" style={{ marginBottom: 16 }}>
-          Não foi possível falar com o serviço de relatórios (porta 8084). Exibindo dados de exemplo.
+          Não foi possível falar com o serviço de relatórios. Exibindo dados de exemplo.
         </div>
       )}
       <div className="card table-wrap">
@@ -79,12 +92,19 @@ export function Reports() {
                 ))
               : reports.map((r) => (
                   <tr key={r.id}>
-                    <td className="strong">{REPORT_TYPE_LABEL[r.type]}</td>
+                    <td className="strong">
+                      {REPORT_TYPE_LABEL[r.type]}
+                      <div className="xs muted" style={{ fontWeight: 400 }}>
+                        {r.team_ids?.length ? `Equipes: ${r.team_ids.map((id) => teamNames[id] ?? id).join(', ')}` : 'Toda a organização'}
+                      </div>
+                    </td>
                     <td>{new Date(r.created_at).toLocaleDateString('pt-BR')}</td>
                     <td><StatusBadge status={r.status === 'done' ? 'ready' : r.status === 'pending' ? 'processing' : 'failed'} /></td>
                     <td>
                       {r.status === 'done' ? (
-                        <a className="link" style={{ textDecoration: 'underline' }} href={downloadURL(r.id)}>Baixar {r.format.toUpperCase()}</a>
+                        <button className="link" style={{ textDecoration: 'underline' }} onClick={() => downloadReport(r).catch(() => setError('Não foi possível baixar o arquivo.'))}>
+                          Baixar {r.format.toUpperCase()}
+                        </button>
                       ) : (
                         <span className="muted">{r.status === 'pending' ? 'Processando dados...' : r.error || 'Falha na geração'}</span>
                       )}

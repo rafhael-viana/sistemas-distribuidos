@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Lock, User } from 'lucide-react'
 import { AuthArt } from '../../components/AuthArt'
 import { Logo } from '../../components/Logo'
-import { canAccess, homeFor, useAuth, type Area } from '../../context/AuthContext'
+import { canAccess, homeFor, SESSION_MSG_KEY, useAuth, type Area } from '../../context/AuthContext'
 import { translateAuthError } from '../../api/auth'
 import { ApiError } from '../../api/client'
 
@@ -14,7 +14,12 @@ export function Login() {
   const [form, setForm] = useState({ login: '', password: '' })
   const [remember, setRemember] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
+  // Motivo de um logout forçado (sessão expirada, conta bloqueada).
+  const [error, setError] = useState(() => {
+    const msg = sessionStorage.getItem(SESSION_MSG_KEY)
+    sessionStorage.removeItem(SESSION_MSG_KEY)
+    return msg ? translateAuthError(msg) : ''
+  })
   const [loading, setLoading] = useState(false)
   const [forgot, setForgot] = useState(false)
 

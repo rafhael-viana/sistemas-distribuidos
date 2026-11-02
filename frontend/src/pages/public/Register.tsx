@@ -30,6 +30,7 @@ export function Register() {
         email: form.email,
         password: form.password,
         username: usernameFromEmail(form.email),
+        invite_code: form.invite.trim() || undefined,
       })
       navigate('/onboarding', { replace: true })
     } catch (err) {

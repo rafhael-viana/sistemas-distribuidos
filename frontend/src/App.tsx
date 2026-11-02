@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { canAccess, homeFor, useAuth, type Area } from './context/AuthContext'
 import { AppLayout, EnvBox } from './components/AppLayout'
+import { TenantPicker } from './context/TenantScope'
 import { Landing } from './pages/public/Landing'
 import { Login } from './pages/public/Login'
 import { Register } from './pages/public/Register'
@@ -80,7 +81,7 @@ export function App() {
         path="/gestao"
         element={
           <RequireAuth area="gestao">
-            <AppLayout nav={ADMIN_NAV} />
+            <AppLayout nav={ADMIN_NAV} sidebarExtra={<TenantPicker />} />
           </RequireAuth>
         }
       >
