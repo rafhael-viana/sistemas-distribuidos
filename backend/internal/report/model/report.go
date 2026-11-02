@@ -32,6 +32,9 @@ type Report struct {
 	Format      Format    `json:"format"`
 	Status      Status    `json:"status"`
 	Error       string    `json:"error,omitempty"`
+	TenantID    string    `json:"tenant_id,omitempty"`
+	TeamIDs     []string  `json:"team_ids,omitempty"`
+	RequestedBy string    `json:"requested_by,omitempty"`
 	ObjectKey   string    `json:"-"`
 	Size        int       `json:"size,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -48,4 +51,8 @@ func (f Format) ContentType() string {
 		return "application/pdf"
 	}
 	return "text/csv; charset=utf-8"
+}
+
+func (r *Report) Scope() Scope {
+	return Scope{TenantID: r.TenantID, TeamIDs: r.TeamIDs}
 }

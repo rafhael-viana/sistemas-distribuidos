@@ -49,9 +49,23 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 	occurred_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS login_attempts_occurred_at_idx ON login_attempts (occurred_at DESC);
+
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS team_ids TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS requested_by TEXT NOT NULL DEFAULT '';
+ALTER TABLE report_users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT '';
+ALTER TABLE report_users ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE report_users ADD COLUMN IF NOT EXISTS team_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE report_users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+
+CREATE TABLE IF NOT EXISTS report_teams (
+	id        TEXT PRIMARY KEY,
+	tenant_id TEXT NOT NULL,
+	name      TEXT NOT NULL
+);
 `
 
-const reportColumns = `id, type, format, status, error, object_key, size, created_at, completed_at`
+const reportColumns = `id, type, format, status, error, object_key, size, created_at, completed_at, tenant_id, team_ids, requested_by`
 
 type PostgresReportRepository struct {
 	db *pgxpool.Pool
@@ -63,12 +77,12 @@ func NewPostgresReportRepository(db *pgxpool.Pool) *PostgresReportRepository {
 
 func (r *PostgresReportRepository) Save(ctx context.Context, rep *model.Report) error {
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO reports (`+reportColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`INSERT INTO reports (`+reportColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 ON CONFLICT (id) DO UPDATE SET
 			status = EXCLUDED.status, error = EXCLUDED.error, object_key = EXCLUDED.object_key,
 			size = EXCLUDED.size, completed_at = EXCLUDED.completed_at`,
 		rep.ID, rep.Type, rep.Format, rep.Status, rep.Error, rep.ObjectKey, rep.Size,
-		rep.CreatedAt, database.NullTime(rep.CompletedAt))
+		rep.CreatedAt, database.NullTime(rep.CompletedAt), rep.TenantID, nonNil(rep.TeamIDs), rep.RequestedBy)
 	if err != nil {
 		return fmt.Errorf("save report: %w", err)
 	}
@@ -87,8 +101,9 @@ func (r *PostgresReportRepository) FindByID(ctx context.Context, id string) (*mo
 }
 
 // List retorna os relatórios do mais recente para o mais antigo.
-func (r *PostgresReportRepository) List(ctx context.Context) ([]*model.Report, error) {
-	rows, err := r.db.Query(ctx, `SELECT `+reportColumns+` FROM reports ORDER BY created_at DESC`)
+func (r *PostgresReportRepository) List(ctx context.Context, tenantID string) ([]*model.Report, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT `+reportColumns+` FROM reports WHERE $1 = '' OR tenant_id = $1 ORDER BY created_at DESC`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("list reports: %w", err)
 	}
@@ -107,7 +122,7 @@ func scanReport(row pgx.Row) (*model.Report, error) {
 		completedAt *time.Time
 	)
 	err := row.Scan(&rep.ID, &rep.Type, &rep.Format, &rep.Status, &rep.Error, &rep.ObjectKey,
-		&rep.Size, &rep.CreatedAt, &completedAt)
+		&rep.Size, &rep.CreatedAt, &completedAt, &rep.TenantID, &rep.TeamIDs, &rep.RequestedBy)
 	if err != nil {
 		return nil, err
 	}
@@ -127,10 +142,10 @@ func NewPostgresActivityRepository(db *pgxpool.Pool) *PostgresActivityRepository
 // SaveUser é idempotente: um cadastro entregue de novo não zera os contadores.
 func (r *PostgresActivityRepository) SaveUser(ctx context.Context, u *model.User) error {
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO report_users (id, name, username, email, registered_at)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO report_users (id, name, username, email, role, tenant_id, team_id, active, registered_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (id) DO NOTHING`,
-		u.ID, u.Name, u.Username, u.Email, u.RegisteredAt)
+		u.ID, u.Name, u.Username, u.Email, u.Role, u.TenantID, u.TeamID, u.Active, u.RegisteredAt)
 	if err != nil {
 		return fmt.Errorf("save user: %w", err)
 	}
@@ -182,11 +197,68 @@ func (r *PostgresActivityRepository) SaveLogin(ctx context.Context, a *model.Log
 	})
 }
 
-// Users retorna os usuários em ordem de cadastro.
-func (r *PostgresActivityRepository) Users(ctx context.Context) ([]*model.User, error) {
+func (r *PostgresActivityRepository) UpdateUser(ctx context.Context, u *model.User) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE report_users SET name = $2, role = $3, tenant_id = $4, team_id = $5, active = $6 WHERE id = $1`,
+		u.ID, u.Name, u.Role, u.TenantID, u.TeamID, u.Active)
+	if err != nil {
+		return fmt.Errorf("update user: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresActivityRepository) DeleteUser(ctx context.Context, id string) error {
+	if _, err := r.db.Exec(ctx, `DELETE FROM report_users WHERE id = $1`, id); err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresActivityRepository) SaveTeam(ctx context.Context, t *model.Team) error {
+	_, err := r.db.Exec(ctx,
+		`INSERT INTO report_teams (id, tenant_id, name) VALUES ($1, $2, $3)
+		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`, t.ID, t.TenantID, t.Name)
+	if err != nil {
+		return fmt.Errorf("save team: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresActivityRepository) DeleteTeam(ctx context.Context, id string) error {
+	return pgx.BeginFunc(ctx, r.db, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE report_users SET team_id = '' WHERE team_id = $1`, id); err != nil {
+			return fmt.Errorf("clear team: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM report_teams WHERE id = $1`, id); err != nil {
+			return fmt.Errorf("delete team: %w", err)
+		}
+		return nil
+	})
+}
+
+func (r *PostgresActivityRepository) Teams(ctx context.Context) ([]*model.Team, error) {
+	rows, err := r.db.Query(ctx, `SELECT id, tenant_id, name FROM report_teams ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("list teams: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*model.Team, error) {
+		var t model.Team
+		err := row.Scan(&t.ID, &t.TenantID, &t.Name)
+		return &t, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list teams: %w", err)
+	}
+	return out, nil
+}
+
+// Users retorna os usuários do escopo em ordem de cadastro.
+func (r *PostgresActivityRepository) Users(ctx context.Context, scope model.Scope) ([]*model.User, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, name, username, email, registered_at, logins_ok, logins_failed, last_login_at
-		 FROM report_users ORDER BY registered_at`)
+		`SELECT id, name, username, email, role, tenant_id, team_id, active, registered_at, logins_ok, logins_failed, last_login_at
+		 FROM report_users
+		 WHERE ($1 = '' OR tenant_id = $1) AND (cardinality($2::text[]) = 0 OR team_id = ANY($2))
+		 ORDER BY registered_at`, scope.TenantID, nonNil(scope.TeamIDs))
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
@@ -195,8 +267,8 @@ func (r *PostgresActivityRepository) Users(ctx context.Context) ([]*model.User, 
 			u           model.User
 			lastLoginAt *time.Time
 		)
-		err := row.Scan(&u.ID, &u.Name, &u.Username, &u.Email, &u.RegisteredAt,
-			&u.LoginsOK, &u.LoginsFailed, &lastLoginAt)
+		err := row.Scan(&u.ID, &u.Name, &u.Username, &u.Email, &u.Role, &u.TenantID, &u.TeamID, &u.Active,
+			&u.RegisteredAt, &u.LoginsOK, &u.LoginsFailed, &lastLoginAt)
 		if err != nil {
 			return nil, err
 		}
@@ -230,4 +302,12 @@ func (r *PostgresActivityRepository) Logins(ctx context.Context) ([]*model.Login
 		return nil, fmt.Errorf("list logins: %w", err)
 	}
 	return out, nil
+}
+
+// nonNil evita gravar NULL em colunas TEXT[] NOT NULL.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

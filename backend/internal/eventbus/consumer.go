@@ -10,6 +10,7 @@ import (
 	"github.com/segmentio/kafka-go"
 
 	"github.com/rafhael-viana/TCC/internal/events"
+	"github.com/rafhael-viana/TCC/internal/requestid"
 )
 
 const (
@@ -72,6 +73,11 @@ func handle(ctx context.Context, msg kafka.Message, h Handler) {
 		log.Printf("eventbus: discarding malformed message at %s/%d offset %d: %v",
 			msg.Topic, msg.Partition, msg.Offset, err)
 		return
+	}
+
+	// O processamento herda o ID de correlação de quem publicou.
+	if e.CorrelationID != "" {
+		ctx = requestid.With(ctx, e.CorrelationID)
 	}
 
 	for attempt := 1; ; attempt++ {

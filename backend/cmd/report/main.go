@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/rafhael-viana/TCC/internal/applog"
 	"github.com/rafhael-viana/TCC/internal/config"
 	"github.com/rafhael-viana/TCC/internal/database"
 	"github.com/rafhael-viana/TCC/internal/eventbus"
@@ -25,6 +26,8 @@ const (
 	generatorGroup = "report-generator"
 )
 
+const serviceName = "report"
+
 func main() {
 	cfg := config.Load("REPORT_PORT", "8084")
 
@@ -36,6 +39,8 @@ func main() {
 	}
 
 	publisher := eventbus.NewKafkaPublisher(cfg.KafkaBrokers, events.TopicReport)
+	logs := eventbus.NewKafkaPublisher(cfg.KafkaBrokers, events.TopicLogs)
+	logger := applog.New(serviceName, logs)
 
 	db, err := database.Connect(context.Background(), cfg.DBDriver, cfg.DatabaseURL, repository.Schema)
 	if err != nil {
@@ -49,7 +54,7 @@ func main() {
 		activity = repository.NewPostgresActivityRepository(db)
 		reports = repository.NewPostgresReportRepository(db)
 	}
-	reportService := service.NewReportService(reports, objects, generator.New(activity), publisher)
+	reportService := service.NewReportService(reports, activity, objects, generator.New(activity), publisher)
 	reportHandler := handler.NewReportHandler(reportService)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -66,16 +71,18 @@ func main() {
 			}
 		})
 	}
-	consume(events.TopicAuth, activityGroup, consumer.NewAuthEvents(activity).Handle)
-	consume(events.TopicReport, generatorGroup, consumer.NewRequests(reportService).Handle)
+	consume(events.TopicAuth, activityGroup, logger.WrapHandler(consumer.NewAuthEvents(activity).Handle))
+	consume(events.TopicReport, generatorGroup, logger.WrapHandler(consumer.NewRequests(reportService).Handle))
 
-	srv := server.New(cfg, router.New(reportHandler))
+	srv := server.New(cfg, router.New(reportHandler, []byte(cfg.JWTSecret), logger))
 	err = srv.Run()
 
 	cancel()
 	consumers.Wait()
-	if cerr := publisher.Close(); cerr != nil {
-		log.Printf("close publisher: %v", cerr)
+	for _, p := range []*eventbus.KafkaPublisher{publisher, logs} {
+		if cerr := p.Close(); cerr != nil {
+			log.Printf("close publisher: %v", cerr)
+		}
 	}
 	if db != nil {
 		db.Close()

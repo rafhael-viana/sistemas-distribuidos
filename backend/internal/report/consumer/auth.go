@@ -32,8 +32,47 @@ func (c *AuthEvents) Handle(ctx context.Context, e events.Event) error {
 			Name:         data.Name,
 			Username:     data.Username,
 			Email:        data.Email,
+			Role:         data.Role,
+			TenantID:     data.TenantID,
+			TeamID:       data.TeamID,
+			Active:       true,
 			RegisteredAt: e.OccurredAt,
 		})
+
+	case events.TypeUserUpdated:
+		var data events.UserUpdated
+		if !decode(e, &data) {
+			return nil
+		}
+		return c.activity.UpdateUser(ctx, &model.User{
+			ID:       data.UserID,
+			Name:     data.Name,
+			Role:     data.Role,
+			TenantID: data.TenantID,
+			TeamID:   data.TeamID,
+			Active:   data.Active,
+		})
+
+	case events.TypeUserDeleted:
+		var data events.UserDeleted
+		if !decode(e, &data) {
+			return nil
+		}
+		return c.activity.DeleteUser(ctx, data.UserID)
+
+	case events.TypeTeamCreated, events.TypeTeamUpdated:
+		var data events.TeamChanged
+		if !decode(e, &data) {
+			return nil
+		}
+		return c.activity.SaveTeam(ctx, &model.Team{ID: data.TeamID, TenantID: data.TenantID, Name: data.Name})
+
+	case events.TypeTeamDeleted:
+		var data events.TeamChanged
+		if !decode(e, &data) {
+			return nil
+		}
+		return c.activity.DeleteTeam(ctx, data.TeamID)
 
 	case events.TypeLoginSucceeded:
 		var data events.LoginSucceeded

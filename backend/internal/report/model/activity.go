@@ -8,6 +8,10 @@ type User struct {
 	Name         string
 	Username     string
 	Email        string
+	Role         string
+	TenantID     string
+	TeamID       string
+	Active       bool
 	RegisteredAt time.Time
 	LoginsOK     int
 	LoginsFailed int
@@ -23,4 +27,33 @@ type LoginAttempt struct {
 	Success    bool
 	Reason     string
 	OccurredAt time.Time
+}
+
+// Team é a visão local de uma equipe, montada a partir dos eventos team.*.
+type Team struct {
+	ID       string
+	TenantID string
+	Name     string
+}
+
+// Scope restringe os dados de um relatório: uma empresa (vazio = todas) e,
+// dentro dela, algumas equipes (vazio = todas).
+type Scope struct {
+	TenantID string
+	TeamIDs  []string
+}
+
+func (s Scope) Match(u *User) bool {
+	if s.TenantID != "" && u.TenantID != s.TenantID {
+		return false
+	}
+	if len(s.TeamIDs) == 0 {
+		return true
+	}
+	for _, id := range s.TeamIDs {
+		if u.TeamID == id {
+			return true
+		}
+	}
+	return false
 }

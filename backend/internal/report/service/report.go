@@ -9,6 +9,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/rafhael-viana/TCC/internal/authn"
 	"github.com/rafhael-viana/TCC/internal/events"
 	"github.com/rafhael-viana/TCC/internal/report/generator"
 	"github.com/rafhael-viana/TCC/internal/report/model"
@@ -27,8 +28,10 @@ type ValidationError struct{ Msg string }
 func (e *ValidationError) Error() string { return e.Msg }
 
 type RequestInput struct {
-	Type   model.Type   `json:"type"`
-	Format model.Format `json:"format"`
+	Type     model.Type   `json:"type"`
+	Format   model.Format `json:"format"`
+	TeamIDs  []string     `json:"team_ids,omitempty"`  // vazio = todas as equipes
+	TenantID string       `json:"tenant_id,omitempty"` // só admin informa; vazio = todas as empresas
 }
 
 // EventPublisher publica eventos de domínio (ex.: no Kafka).
@@ -38,39 +41,52 @@ type EventPublisher interface {
 
 type ReportService struct {
 	reports   repository.ReportRepository
+	activity  repository.ActivityRepository
 	objects   storage.ObjectStore
 	generator *generator.Generator
 	events    EventPublisher
 }
 
-func NewReportService(reports repository.ReportRepository, objects storage.ObjectStore, gen *generator.Generator, publisher EventPublisher) *ReportService {
-	return &ReportService{reports: reports, objects: objects, generator: gen, events: publisher}
+func NewReportService(reports repository.ReportRepository, activity repository.ActivityRepository,
+	objects storage.ObjectStore, gen *generator.Generator, publisher EventPublisher) *ReportService {
+	return &ReportService{reports: reports, activity: activity, objects: objects, generator: gen, events: publisher}
 }
 
 // Request registra o pedido como pendente e publica report.requested. A
 // geração acontece depois, quando o evento é consumido.
-func (s *ReportService) Request(ctx context.Context, in RequestInput) (*model.Report, error) {
+func (s *ReportService) Request(ctx context.Context, actor *authn.Claims, in RequestInput) (*model.Report, error) {
 	if err := validate(in.Type, in.Format); err != nil {
+		return nil, err
+	}
+	tenantID := authn.TenantScope(actor, in.TenantID)
+	if err := s.checkTeams(ctx, tenantID, in.TeamIDs); err != nil {
 		return nil, err
 	}
 
 	rep := &model.Report{
-		ID:        rand.Text(),
-		Type:      in.Type,
-		Format:    in.Format,
-		Status:    model.StatusPending,
-		CreatedAt: time.Now().UTC(),
+		ID:          rand.Text(),
+		Type:        in.Type,
+		Format:      in.Format,
+		Status:      model.StatusPending,
+		TenantID:    tenantID,
+		TeamIDs:     in.TeamIDs,
+		RequestedBy: actor.UserID(),
+		CreatedAt:   time.Now().UTC(),
 	}
 	if err := s.reports.Save(ctx, rep); err != nil {
 		return nil, fmt.Errorf("save report: %w", err)
 	}
 
 	e, err := events.New(eventSource, events.TypeReportRequested, events.ReportRequested{
-		ReportID: rep.ID,
-		Type:     string(rep.Type),
-		Format:   string(rep.Format),
+		ReportID:    rep.ID,
+		Type:        string(rep.Type),
+		Format:      string(rep.Format),
+		TenantID:    rep.TenantID,
+		TeamIDs:     rep.TeamIDs,
+		RequestedBy: rep.RequestedBy,
 	})
 	if err == nil {
+		e.TenantID = rep.TenantID
 		err = s.events.Publish(ctx, rep.ID, e)
 	}
 	if err != nil {
@@ -101,14 +117,15 @@ func (s *ReportService) Generate(ctx context.Context, req events.ReportRequested
 	rep, err := s.reports.FindByID(ctx, req.ReportID)
 	switch {
 	case errors.Is(err, repository.ErrReportNotFound):
-		rep = &model.Report{ID: req.ReportID, Type: typ, Format: format, CreatedAt: time.Now().UTC()}
+		rep = &model.Report{ID: req.ReportID, Type: typ, Format: format, TenantID: req.TenantID, TeamIDs: req.TeamIDs,
+			RequestedBy: req.RequestedBy, CreatedAt: time.Now().UTC()}
 	case err != nil:
 		return err
 	case rep.Status != model.StatusPending:
 		return nil
 	}
 
-	data, genErr := s.generator.Generate(ctx, rep.Type, rep.Format)
+	data, genErr := s.generator.Generate(ctx, rep)
 	if genErr == nil {
 		rep.ObjectKey = rep.Filename()
 		genErr = s.objects.Put(ctx, rep.ObjectKey, data)
@@ -126,17 +143,47 @@ func (s *ReportService) Generate(ctx context.Context, req events.ReportRequested
 	return s.reports.Save(ctx, rep)
 }
 
-func (s *ReportService) Get(ctx context.Context, id string) (*model.Report, error) {
-	return s.reports.FindByID(ctx, id)
+// Get devolve o relatório se ele for da empresa de quem pede (admin vê todos).
+func (s *ReportService) Get(ctx context.Context, actor *authn.Claims, id string) (*model.Report, error) {
+	rep, err := s.reports.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if actor.Role != authn.RoleAdmin && rep.TenantID != actor.TenantID {
+		return nil, repository.ErrReportNotFound
+	}
+	return rep, nil
 }
 
-func (s *ReportService) List(ctx context.Context) ([]*model.Report, error) {
-	return s.reports.List(ctx)
+func (s *ReportService) List(ctx context.Context, actor *authn.Claims, tenantID string) ([]*model.Report, error) {
+	return s.reports.List(ctx, authn.TenantScope(actor, tenantID))
+}
+
+// checkTeams confere que as equipes pedidas existem na empresa.
+func (s *ReportService) checkTeams(ctx context.Context, tenantID string, teamIDs []string) error {
+	if len(teamIDs) == 0 {
+		return nil
+	}
+	teams, err := s.activity.Teams(ctx)
+	if err != nil {
+		return err
+	}
+	known := map[string]string{}
+	for _, t := range teams {
+		known[t.ID] = t.TenantID
+	}
+	for _, id := range teamIDs {
+		tenant, ok := known[id]
+		if !ok || (tenantID != "" && tenant != tenantID) {
+			return &ValidationError{"team not found: " + id}
+		}
+	}
+	return nil
 }
 
 // Open devolve o relatório e o conteúdo do arquivo; quem chama fecha o reader.
-func (s *ReportService) Open(ctx context.Context, id string) (*model.Report, io.ReadCloser, error) {
-	rep, err := s.reports.FindByID(ctx, id)
+func (s *ReportService) Open(ctx context.Context, actor *authn.Claims, id string) (*model.Report, io.ReadCloser, error) {
+	rep, err := s.Get(ctx, actor, id)
 	if err != nil {
 		return nil, nil, err
 	}

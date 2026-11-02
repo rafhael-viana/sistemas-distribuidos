@@ -6,13 +6,16 @@ memória** ou **PostgreSQL**.
 
 | Serviço        | Porta | O que faz                                                        |
 | -------------- | ----- | ---------------------------------------------------------------- |
-| `api`          | 8080  | API Gateway: repassa `/api/v1/auth/*` para o `auth`              |
-| `auth`         | 8081  | Cadastro e login (JWT); publica eventos em `auth.events`         |
+| `api`          | 8080  | API Gateway: único ponto de entrada; valida o token, aplica bloqueios e limites, repassa para os serviços e mostra o status dos componentes |
+| `auth`         | 8081  | Login (JWT), empresas (tenants), equipes e usuários; publica em `auth.events` |
 | `notification` | 8082  | Envia emails (mock: só aparecem no log) a partir dos eventos     |
-| `audit`        | 8083  | Trilha de auditoria com todos os eventos do `auth`               |
-| `report`       | 8084  | Gera relatórios PDF e CSV de forma assíncrona                    |
-| `kafka`        | 9092  | Barramento de eventos (tópicos `auth.events` e `report.events`)  |
+| `audit`        | 8083  | Trilha de auditoria (`auth.events`, `report.events`) e logs técnicos (`logs.events`) |
+| `report`       | 8084  | Gera relatórios PDF e CSV de forma assíncrona, por empresa e equipe |
+| `kafka`        | 9092  | Barramento de eventos (`auth.events`, `report.events`, `logs.events`) |
 | `postgres`     | 5432  | Só sobe com `DB_DRIVER=postgres`; um banco por serviço           |
+
+O frontend fala só com o gateway. As portas dos serviços ficam expostas para
+depuração.
 
 ## Pré-requisitos
 
@@ -96,8 +99,8 @@ Cada usuário tem um perfil (`role`): `profissional` (colaborador), `gestao`
 `profissional`; contas de gestão e admin vêm do arquivo de seed.
 
 Ao subir, o `auth` lê `seed/users.json` (montado em `/seed` pelo compose) e
-cria as contas que ainda não existem. O arquivo fica fora do git; use
-`seed/users.example.json` como modelo:
+cria as empresas, equipes e contas que ainda não existem. O arquivo fica fora
+do git; use `seed/users.example.json` como modelo:
 
 ```sh
 cp seed/users.example.json seed/users.json   # edite nomes, e-mails e senhas
@@ -141,28 +144,66 @@ Cada serviço lê a própria porta (`API_PORT`, `AUTH_PORT`, `NOTIFICATION_PORT`
 Lembre de parar o container do serviço antes (`docker compose stop auth`) para
 liberar a porta.
 
+## Empresas, equipes e acesso
+
+- **Empresa (tenant):** criada pelo admin. Tem plano, limite de
+  colaboradores, limite de requisições por minuto, domínios de e-mail e código
+  de convite.
+- **Cadastro público:** o colaborador entra na empresa pelo código de convite
+  ou pelo domínio do e-mail. Se a empresa tiver domínios, o e-mail precisa ser
+  de um deles. O limite de colaboradores vale também aqui.
+- **Equipes:** criadas pela gestão (RH) da empresa. Cada usuário tem uma
+  equipe, usada nos relatórios e nos ciclos de pesquisa.
+- **Bloqueios:** usuário inativado ou empresa suspensa não faz login. As
+  sessões abertas são barradas no gateway em até 10 s, o cache da consulta de
+  acesso ao `auth`. O gateway também aplica o limite de requisições por minuto
+  da empresa (429).
+- **Permissões:** gestão só vê e altera a própria empresa. Admin vê todas as
+  empresas, e informa `tenant_id` quando a operação é de uma delas.
+
+| Rota (pelo gateway)                  | Quem pode            |
+| ------------------------------------ | -------------------- |
+| `POST /api/v1/auth/register`, `/login` | público            |
+| `GET /api/v1/auth/me`                | qualquer usuário     |
+| `/api/v1/tenants`                    | admin                |
+| `/api/v1/teams`, `/api/v1/users`     | gestão e admin       |
+| `/api/v1/reports`                    | gestão e admin       |
+| `GET /api/v1/audit/events`           | gestão e admin       |
+| `GET /api/v1/audit/logs`, `/logs/trace/{request_id}` | admin |
+| `GET /api/v1/system/status`          | admin                |
+
+## Logs técnicos e correlação
+
+Toda requisição recebe um `X-Request-ID` no gateway, repassado aos serviços e
+gravado no envelope dos eventos do Kafka (`correlation_id`). Cada serviço
+publica em `logs.events` as requisições que atende (exceto GETs bem-sucedidos
+e `/health`), os eventos que consome e os panics, com stack trace. O `audit`
+guarda esses logs. `GET /api/v1/audit/logs/trace/{request_id}` devolve o
+caminho completo de uma requisição: gateway, serviço, Kafka e consumidores.
+
 ## Usando a API
 
-Há exemplos prontos em `http/` (formato `.http`, para Kulala/REST Client). O
-fluxo básico:
+Há exemplos prontos em `http/` (formato `.http`, para Kulala/REST Client). As
+rotas protegidas pedem o token do login no header `Authorization: Bearer`.
 
 ```sh
-# cadastro e login pelo gateway
-curl -X POST localhost:8080/api/v1/auth/register -H 'Content-Type: application/json' \
-  -d '{"name":"Maria","username":"maria","email":"maria@example.com","password":"senha12345"}'
-curl -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
-  -d '{"login":"maria","password":"senha12345"}'
+# login (as contas de gestão/admin vêm do seed)
+TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"login":"gestao","password":"..."}' | jq -r .token)
 
-# efeitos dos eventos
-curl localhost:8082/api/v1/notifications/email   # email de boas-vindas
-curl localhost:8083/api/v1/audit/events          # trilha de auditoria
+# equipes e usuários da empresa
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/teams
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/users
 
-# relatório assíncrono: pede (202), acompanha o status e baixa quando "done"
-curl -X POST localhost:8084/api/v1/reports -H 'Content-Type: application/json' \
-  -d '{"type":"users","format":"pdf"}'
-curl localhost:8084/api/v1/reports/<id>
-curl -o users.pdf localhost:8084/api/v1/reports/<id>/download
+# relatório assíncrono de uma equipe: pede (202), acompanha e baixa quando "done"
+curl -X POST localhost:8080/api/v1/reports -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"type":"users","format":"pdf","team_ids":["tm_..."]}'
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/reports/<id>
+curl -H "Authorization: Bearer $TOKEN" -o users.pdf localhost:8080/api/v1/reports/<id>/download
+
+# trilha de auditoria da empresa
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/audit/events
 ```
 
-Tipos de relatório: `users` (usuários com resumo de logins) e `logins`
-(tentativas de login). Formatos: `pdf` e `csv`.
+Tipos de relatório: `users` (usuários com equipe, status e resumo de logins) e
+`logins` (tentativas de login). Formatos: `pdf` e `csv`.

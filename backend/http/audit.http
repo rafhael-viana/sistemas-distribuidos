@@ -1,7 +1,24 @@
+### Login da gestão (troque pelas credenciais do seed/users.json)
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "login": "gestao",
+  "password": "troque-esta-senha"
+}
+
+# @lang=lua
+> {%
+  local body = vim.json.decode(response.body)
+  client.global.set("token", body.token)
+%}
+
 ### Trilha de auditoria completa
-GET http://localhost:8083/api/v1/audit/events
+GET http://localhost:8080/api/v1/audit/events
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 ### Só tentativas de login que falharam
-GET http://localhost:8083/api/v1/audit/events?type=user.login_failed
+GET http://localhost:8080/api/v1/audit/events?type=user.login_failed
+Authorization: Bearer {{token}}
 Content-Type: application/json

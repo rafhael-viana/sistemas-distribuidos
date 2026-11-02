@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rafhael-viana/TCC/internal/report/model"
@@ -29,36 +30,50 @@ func New(activity repository.ActivityRepository) *Generator {
 	return &Generator{activity: activity}
 }
 
-// Generate monta o relatório com os dados atuais e devolve o arquivo pronto.
-func (g *Generator) Generate(ctx context.Context, typ model.Type, format model.Format) ([]byte, error) {
-	var (
-		t   *Table
-		err error
-	)
-	switch typ {
+// Generate monta o relatório com os dados atuais do escopo pedido (empresa e
+// equipes) e devolve o arquivo pronto.
+func (g *Generator) Generate(ctx context.Context, rep *model.Report) ([]byte, error) {
+	teams, err := g.activity.Teams(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load teams: %w", err)
+	}
+	teamNames := make(map[string]string, len(teams))
+	for _, t := range teams {
+		teamNames[t.ID] = t.Name
+	}
+
+	var t *Table
+	switch rep.Type {
 	case model.TypeUsers:
-		t, err = g.users(ctx)
+		t, err = g.users(ctx, rep.Scope(), teamNames)
 	case model.TypeLogins:
-		t, err = g.logins(ctx)
+		t, err = g.logins(ctx, rep.Scope())
 	default:
-		return nil, fmt.Errorf("unknown report type %q", typ)
+		return nil, fmt.Errorf("unknown report type %q", rep.Type)
 	}
 	if err != nil {
 		return nil, err
 	}
+	if len(rep.TeamIDs) > 0 {
+		names := make([]string, 0, len(rep.TeamIDs))
+		for _, id := range rep.TeamIDs {
+			names = append(names, cmp.Or(teamNames[id], id))
+		}
+		t.Title += " - Equipes: " + strings.Join(names, ", ")
+	}
 
-	switch format {
+	switch rep.Format {
 	case model.FormatCSV:
 		return renderCSV(t)
 	case model.FormatPDF:
 		return renderPDF(t)
 	default:
-		return nil, fmt.Errorf("unknown report format %q", format)
+		return nil, fmt.Errorf("unknown report format %q", rep.Format)
 	}
 }
 
-func (g *Generator) users(ctx context.Context) (*Table, error) {
-	users, err := g.activity.Users(ctx)
+func (g *Generator) users(ctx context.Context, scope model.Scope, teamNames map[string]string) (*Table, error) {
+	users, err := g.activity.Users(ctx, scope)
 	if err != nil {
 		return nil, fmt.Errorf("load users: %w", err)
 	}
@@ -66,13 +81,19 @@ func (g *Generator) users(ctx context.Context) (*Table, error) {
 	t := &Table{
 		Title:       "Usuários cadastrados",
 		GeneratedAt: time.Now().UTC(),
-		Headers:     []string{"Nome", "Username", "Email", "Cadastro", "Logins OK", "Logins com falha", "Último login"},
+		Headers:     []string{"Nome", "Username", "Email", "Equipe", "Status", "Cadastro", "Logins OK", "Logins com falha", "Último login"},
 	}
 	for _, u := range users {
+		status := "ativo"
+		if !u.Active {
+			status = "inativo"
+		}
 		t.Rows = append(t.Rows, []string{
 			u.Name,
 			u.Username,
 			u.Email,
+			teamNames[u.TeamID],
+			status,
 			formatTime(u.RegisteredAt),
 			strconv.Itoa(u.LoginsOK),
 			strconv.Itoa(u.LoginsFailed),
@@ -82,12 +103,14 @@ func (g *Generator) users(ctx context.Context) (*Table, error) {
 	return t, nil
 }
 
-func (g *Generator) logins(ctx context.Context) (*Table, error) {
+// logins lista as tentativas dos usuários do escopo. Sem escopo (relatório da
+// plataforma), entram também as tentativas com login desconhecido.
+func (g *Generator) logins(ctx context.Context, scope model.Scope) (*Table, error) {
 	logins, err := g.activity.Logins(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load logins: %w", err)
 	}
-	users, err := g.activity.Users(ctx)
+	users, err := g.activity.Users(ctx, scope)
 	if err != nil {
 		return nil, fmt.Errorf("load users: %w", err)
 	}
@@ -101,7 +124,11 @@ func (g *Generator) logins(ctx context.Context) (*Table, error) {
 		GeneratedAt: time.Now().UTC(),
 		Headers:     []string{"Data", "Login", "Resultado", "Motivo"},
 	}
+	scoped := scope.TenantID != "" || len(scope.TeamIDs) > 0
 	for _, a := range logins {
+		if _, known := usernames[a.UserID]; scoped && !known {
+			continue
+		}
 		result := "falha"
 		if a.Success {
 			result = "sucesso"

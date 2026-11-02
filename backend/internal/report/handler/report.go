@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/rafhael-viana/TCC/internal/authn"
 	"github.com/rafhael-viana/TCC/internal/report/repository"
 	"github.com/rafhael-viana/TCC/internal/report/service"
 	"github.com/rafhael-viana/TCC/internal/response"
@@ -36,7 +37,7 @@ func (h *ReportHandler) Request(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rep, err := h.reports.Request(r.Context(), in)
+	rep, err := h.reports.Request(r.Context(), actor(r), in)
 	if err != nil {
 		writeReportError(w, err)
 		return
@@ -46,7 +47,7 @@ func (h *ReportHandler) Request(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) Get(w http.ResponseWriter, r *http.Request) {
-	rep, err := h.reports.Get(r.Context(), mux.Vars(r)["id"])
+	rep, err := h.reports.Get(r.Context(), actor(r), mux.Vars(r)["id"])
 	if err != nil {
 		writeReportError(w, err)
 		return
@@ -55,7 +56,7 @@ func (h *ReportHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) List(w http.ResponseWriter, r *http.Request) {
-	reports, err := h.reports.List(r.Context())
+	reports, err := h.reports.List(r.Context(), actor(r), r.URL.Query().Get("tenant_id"))
 	if err != nil {
 		writeReportError(w, err)
 		return
@@ -64,7 +65,7 @@ func (h *ReportHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) Download(w http.ResponseWriter, r *http.Request) {
-	rep, f, err := h.reports.Open(r.Context(), mux.Vars(r)["id"])
+	rep, f, err := h.reports.Open(r.Context(), actor(r), mux.Vars(r)["id"])
 	if err != nil {
 		writeReportError(w, err)
 		return
@@ -77,6 +78,12 @@ func (h *ReportHandler) Download(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, f); err != nil {
 		log.Printf("download report %s: %v", rep.ID, err)
 	}
+}
+
+// actor devolve quem chama; todas as rotas passam por authn.Require.
+func actor(r *http.Request) *authn.Claims {
+	c, _ := authn.FromContext(r.Context())
+	return c
 }
 
 func writeReportError(w http.ResponseWriter, err error) {

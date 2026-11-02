@@ -5,8 +5,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/rafhael-viana/TCC/internal/handler"
-	"github.com/rafhael-viana/TCC/internal/middleware"
+	"github.com/rafhael-viana/TCC/internal/applog"
 	"github.com/rafhael-viana/TCC/internal/response"
 )
 
@@ -24,21 +23,8 @@ func NewMux() *mux.Router {
 	return r
 }
 
-// Wrap aplica os middlewares fora do mux para cobrir também 404/405.
-func Wrap(r *mux.Router) http.Handler {
-	return middleware.Recover(middleware.Logging(r))
-}
-
-// New monta as rotas da API principal. As rotas /api/v1/auth/* são
-// repassadas para o serviço de autenticação.
-func New(authProxy http.Handler) http.Handler {
-	r := NewMux()
-
-	r.HandleFunc("/health", handler.Health).Methods(http.MethodGet)
-
-	api := r.PathPrefix("/api/v1").Subrouter()
-	api.HandleFunc("/hello", handler.Hello).Methods(http.MethodGet)
-	api.PathPrefix("/auth/").Handler(authProxy)
-
-	return Wrap(r)
+// Wrap aplica os middlewares fora do mux para cobrir também 404/405: o
+// logger atribui o X-Request-ID, recupera panics e publica o log técnico.
+func Wrap(r *mux.Router, logger *applog.Logger) http.Handler {
+	return logger.Middleware(r)
 }

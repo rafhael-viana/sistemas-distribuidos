@@ -9,7 +9,8 @@ import (
 )
 
 type Filter struct {
-	Type string // vazio = todos
+	Type     string // vazio = todos
+	TenantID string // vazio = todas as empresas
 }
 
 type EntryRepository interface {
@@ -48,7 +49,7 @@ func (r *MemoryEntryRepository) List(_ context.Context, f Filter) ([]*model.Entr
 
 	out := make([]*model.Entry, 0, len(r.entries))
 	for _, e := range r.entries {
-		if f.Type != "" && e.Type != f.Type {
+		if (f.Type != "" && e.Type != f.Type) || (f.TenantID != "" && e.TenantID != f.TenantID) {
 			continue
 		}
 		cp := *e

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/rafhael-viana/TCC/internal/applog"
 	"github.com/rafhael-viana/TCC/internal/config"
 	"github.com/rafhael-viana/TCC/internal/database"
 	"github.com/rafhael-viana/TCC/internal/eventbus"
@@ -18,6 +19,8 @@ import (
 )
 
 const consumerGroup = "notification"
+
+const serviceName = "notification"
 
 func main() {
 	cfg := config.Load("NOTIFICATION_PORT", "8082")
@@ -34,6 +37,9 @@ func main() {
 	emailService := service.NewEmailService(emails, sender.NewMockSender())
 	emailHandler := handler.NewEmailHandler(emailService)
 
+	logs := eventbus.NewKafkaPublisher(cfg.KafkaBrokers, events.TopicLogs)
+	logger := applog.New(serviceName, logs)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	consumed := make(chan struct{})
 	go func() {
@@ -42,17 +48,20 @@ func main() {
 			Brokers: cfg.KafkaBrokers,
 			Topic:   events.TopicAuth,
 			GroupID: consumerGroup,
-		}, consumer.NewAuthEvents(emailService).Handle)
+		}, logger.WrapHandler(consumer.NewAuthEvents(emailService).Handle))
 		if err != nil {
 			log.Printf("auth events consumer stopped: %v", err)
 		}
 	}()
 
-	srv := server.New(cfg, router.New(emailHandler))
+	srv := server.New(cfg, router.New(emailHandler, logger))
 	err = srv.Run()
 
 	cancel()
 	<-consumed
+	if cerr := logs.Close(); cerr != nil {
+		log.Printf("close publisher: %v", cerr)
+	}
 	if db != nil {
 		db.Close()
 	}

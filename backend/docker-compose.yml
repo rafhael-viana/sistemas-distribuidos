@@ -78,7 +78,7 @@ services:
       - -c
       - |
         set -e
-        for topic in auth.events report.events; do
+        for topic in auth.events report.events logs.events; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server=kafka:29092 \
             --create --if-not-exists --topic="$$topic" --partitions=3 --replication-factor=1
         done
@@ -146,6 +146,7 @@ services:
       DATABASE_URL: postgres://tcc:${POSTGRES_PASSWORD:-tcc}@postgres:5432/audit?sslmode=disable
       AUDIT_PORT: "8083"
       KAFKA_BROKERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
     ports:
       - "8083:8083"
     healthcheck:
@@ -167,6 +168,7 @@ services:
       DATABASE_URL: postgres://tcc:${POSTGRES_PASSWORD:-tcc}@postgres:5432/report?sslmode=disable
       REPORT_PORT: "8084"
       KAFKA_BROKERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       REPORTS_DIR: /data/reports
     volumes:
       - reports:/data
@@ -188,6 +190,14 @@ services:
     environment:
       API_PORT: "8080"
       AUTH_SERVICE_URL: http://auth:8081
+      NOTIFICATION_SERVICE_URL: http://notification:8082
+      AUDIT_SERVICE_URL: http://audit:8083
+      REPORT_SERVICE_URL: http://report:8084
+      KAFKA_BROKERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      # Só para o painel de componentes (/api/v1/system/status).
+      DB_DRIVER: ${DB_DRIVER:-memory}
+      POSTGRES_ADDR: postgres:5432
     ports:
       - "8080:8080"
     healthcheck:

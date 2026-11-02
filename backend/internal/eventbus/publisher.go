@@ -10,6 +10,7 @@ import (
 	"github.com/segmentio/kafka-go"
 
 	"github.com/rafhael-viana/TCC/internal/events"
+	"github.com/rafhael-viana/TCC/internal/requestid"
 )
 
 // KafkaPublisher publica eventos em um tópico do Kafka. A escrita é
@@ -35,8 +36,12 @@ func NewKafkaPublisher(brokers []string, topic string) *KafkaPublisher {
 	}}
 }
 
-// Publish envia o evento usando key como chave de partição.
+// Publish envia o evento usando key como chave de partição. Sem
+// CorrelationID, usa o X-Request-ID da requisição em ctx.
 func (p *KafkaPublisher) Publish(ctx context.Context, key string, e events.Event) error {
+	if e.CorrelationID == "" {
+		e.CorrelationID = requestid.From(ctx)
+	}
 	value, err := json.Marshal(e)
 	if err != nil {
 		return fmt.Errorf("marshal event: %w", err)

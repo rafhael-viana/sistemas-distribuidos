@@ -14,7 +14,8 @@ var ErrReportNotFound = errors.New("report not found")
 type ReportRepository interface {
 	Save(ctx context.Context, r *model.Report) error
 	FindByID(ctx context.Context, id string) (*model.Report, error)
-	List(ctx context.Context) ([]*model.Report, error)
+	// List retorna os relatórios da empresa (todos, com tenantID vazio).
+	List(ctx context.Context, tenantID string) ([]*model.Report, error)
 }
 
 // MemoryReportRepository guarda os pedidos de relatório em memória. Serve até
@@ -50,12 +51,15 @@ func (r *MemoryReportRepository) FindByID(_ context.Context, id string) (*model.
 }
 
 // List retorna os relatórios do mais recente para o mais antigo.
-func (r *MemoryReportRepository) List(_ context.Context) ([]*model.Report, error) {
+func (r *MemoryReportRepository) List(_ context.Context, tenantID string) ([]*model.Report, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	out := make([]*model.Report, 0, len(r.reports))
 	for _, rep := range r.reports {
+		if tenantID != "" && rep.TenantID != tenantID {
+			continue
+		}
 		cp := *rep
 		out = append(out, &cp)
 	}

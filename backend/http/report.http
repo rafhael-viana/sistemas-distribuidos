@@ -1,5 +1,21 @@
+### Login da gestão (troque pelas credenciais do seed/users.json)
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "login": "gestao",
+  "password": "troque-esta-senha"
+}
+
+# @lang=lua
+> {%
+  local body = vim.json.decode(response.body)
+  client.global.set("token", body.token)
+%}
+
 ### Pede relatório de usuários em PDF -> 202 (gerado de forma assíncrona)
-POST http://localhost:8084/api/v1/reports
+POST http://localhost:8080/api/v1/reports
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -14,7 +30,8 @@ Content-Type: application/json
 %}
 
 ### Pede relatório de tentativas de login em CSV -> 202
-POST http://localhost:8084/api/v1/reports
+POST http://localhost:8080/api/v1/reports
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -23,7 +40,8 @@ Content-Type: application/json
 }
 
 ### Tipo inválido -> 400
-POST http://localhost:8084/api/v1/reports
+POST http://localhost:8080/api/v1/reports
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -32,10 +50,13 @@ Content-Type: application/json
 }
 
 ### Lista os relatórios
-GET http://localhost:8084/api/v1/reports
+GET http://localhost:8080/api/v1/reports
+Authorization: Bearer {{token}}
 
 ### Status de um relatório (pending, done ou failed)
-GET http://localhost:8084/api/v1/reports/{{report_id}}
+GET http://localhost:8080/api/v1/reports/{{report_id}}
+Authorization: Bearer {{token}}
 
 ### Baixa o arquivo (409 enquanto não estiver pronto)
-GET http://localhost:8084/api/v1/reports/{{report_id}}/download
+GET http://localhost:8080/api/v1/reports/{{report_id}}/download
+Authorization: Bearer {{token}}

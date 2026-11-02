@@ -21,6 +21,9 @@ type User struct {
 	Username     string    `json:"username"`
 	Email        string    `json:"email"`
 	Role         Role      `json:"role"`
+	TenantID     string    `json:"tenant_id,omitempty"` // vazio só para admin da plataforma
+	TeamID       string    `json:"team_id,omitempty"`
+	Active       bool      `json:"active"`
 	PasswordHash string    `json:"-"`
 	CreatedAt    time.Time `json:"created_at"`
 }

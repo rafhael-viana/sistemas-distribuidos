@@ -1,16 +1,33 @@
-[
-  {
-    "name": "Gestora Exemplo",
-    "username": "gestao",
-    "email": "gestao@mindsync.local",
-    "password": "troque-esta-senha",
-    "role": "gestao"
-  },
-  {
-    "name": "Admin Exemplo",
-    "username": "admin",
-    "email": "admin@mindsync.local",
-    "password": "troque-esta-senha",
-    "role": "admin"
-  }
-]
+{
+  "tenants": [
+    {
+      "id": "tn_mindsync",
+      "name": "MindSync Demo",
+      "plan": "business",
+      "domains": ["mindsync.local"],
+      "invite_code": "ORG-DEMO"
+    }
+  ],
+  "teams": [
+    { "tenant": "tn_mindsync", "name": "Recursos Humanos" },
+    { "tenant": "tn_mindsync", "name": "Engenharia de Software" }
+  ],
+  "users": [
+    {
+      "name": "Gestora Exemplo",
+      "username": "gestao",
+      "email": "gestao@mindsync.local",
+      "password": "troque-esta-senha",
+      "role": "gestao",
+      "tenant": "tn_mindsync",
+      "team": "Recursos Humanos"
+    },
+    {
+      "name": "Admin Exemplo",
+      "username": "admin",
+      "email": "admin@mindsync.local",
+      "password": "troque-esta-senha",
+      "role": "admin"
+    }
+  ]
+}

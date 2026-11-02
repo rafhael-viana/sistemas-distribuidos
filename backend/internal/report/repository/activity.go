@@ -13,8 +13,15 @@ import (
 // partir dos eventos consumidos do Kafka.
 type ActivityRepository interface {
 	SaveUser(ctx context.Context, u *model.User) error
+	// UpdateUser grava nome, perfil, empresa, equipe e status.
+	UpdateUser(ctx context.Context, u *model.User) error
+	DeleteUser(ctx context.Context, id string) error
 	SaveLogin(ctx context.Context, a *model.LoginAttempt) error
-	Users(ctx context.Context) ([]*model.User, error)
+	SaveTeam(ctx context.Context, t *model.Team) error
+	// DeleteTeam remove a equipe e tira os membros dela.
+	DeleteTeam(ctx context.Context, id string) error
+	Teams(ctx context.Context) ([]*model.Team, error)
+	Users(ctx context.Context, scope model.Scope) ([]*model.User, error)
 	Logins(ctx context.Context) ([]*model.LoginAttempt, error)
 }
 
@@ -24,13 +31,71 @@ type MemoryActivityRepository struct {
 	mu     sync.RWMutex
 	users  map[string]*model.User         // chave: ID
 	logins map[string]*model.LoginAttempt // chave: EventID
+	teams  map[string]*model.Team         // chave: ID
 }
 
 func NewMemoryActivityRepository() *MemoryActivityRepository {
 	return &MemoryActivityRepository{
 		users:  make(map[string]*model.User),
 		logins: make(map[string]*model.LoginAttempt),
+		teams:  make(map[string]*model.Team),
 	}
+}
+
+func (r *MemoryActivityRepository) UpdateUser(_ context.Context, u *model.User) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.users[u.ID]
+	if !ok {
+		return nil // atualização de usuário que nunca chegou: ignora
+	}
+	existing.Name, existing.Role, existing.TenantID = u.Name, u.Role, u.TenantID
+	existing.TeamID, existing.Active = u.TeamID, u.Active
+	return nil
+}
+
+func (r *MemoryActivityRepository) DeleteUser(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.users, id)
+	return nil
+}
+
+func (r *MemoryActivityRepository) SaveTeam(_ context.Context, t *model.Team) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cp := *t
+	r.teams[t.ID] = &cp
+	return nil
+}
+
+func (r *MemoryActivityRepository) DeleteTeam(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.teams, id)
+	for _, u := range r.users {
+		if u.TeamID == id {
+			u.TeamID = ""
+		}
+	}
+	return nil
+}
+
+func (r *MemoryActivityRepository) Teams(_ context.Context) ([]*model.Team, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	out := make([]*model.Team, 0, len(r.teams))
+	for _, t := range r.teams {
+		cp := *t
+		out = append(out, &cp)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
 }
 
 // SaveUser é idempotente: um cadastro entregue de novo não zera os contadores.
@@ -86,13 +151,16 @@ func (r *MemoryActivityRepository) findByLogin(login string) *model.User {
 	return nil
 }
 
-// Users retorna os usuários em ordem de cadastro.
-func (r *MemoryActivityRepository) Users(_ context.Context) ([]*model.User, error) {
+// Users retorna os usuários do escopo em ordem de cadastro.
+func (r *MemoryActivityRepository) Users(_ context.Context, scope model.Scope) ([]*model.User, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	out := make([]*model.User, 0, len(r.users))
 	for _, u := range r.users {
+		if !scope.Match(u) {
+			continue
+		}
 		cp := *u
 		out = append(out, &cp)
 	}
