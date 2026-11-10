@@ -4,6 +4,9 @@ package authn
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"slices"
@@ -37,6 +40,11 @@ func Sign(secret []byte, c Claims) (string, error) {
 var ErrInvalidToken = errors.New("invalid token")
 
 func Parse(secret []byte, token string) (*Claims, error) {
+	// Sem segredo configurado, qualquer um assinaria um token com a chave
+	// vazia: nenhum token é aceito.
+	if len(secret) == 0 {
+		return nil, ErrInvalidToken
+	}
 	var c Claims
 	_, err := jwt.ParseWithClaims(token, &c, func(*jwt.Token) (any, error) { return secret, nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
@@ -108,6 +116,37 @@ func Require(roles ...string) func(http.Handler) http.Handler {
 			}
 			if len(roles) > 0 && !slices.Contains(roles, c.Role) {
 				response.Error(w, http.StatusForbidden, "forbidden")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// InternalHeader leva o token das chamadas entre serviços (ex.: gateway →
+// auth na consulta de acesso). Essas rotas não passam pelo gateway, mas a
+// porta do serviço pode estar exposta; sem o token, respondem 401.
+const InternalHeader = "X-Internal-Token"
+
+// InternalToken deriva do JWT_SECRET o token das chamadas internas, para não
+// exigir mais uma variável de ambiente. Quem não conhece o segredo não o calcula.
+func InternalToken(secret []byte) string {
+	if len(secret) == 0 {
+		return ""
+	}
+	m := hmac.New(sha256.New, secret)
+	m.Write([]byte("mindsync/internal-access/v1"))
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+// RequireInternal só deixa passar requisições com o token interno correto.
+func RequireInternal(secret []byte) func(http.Handler) http.Handler {
+	want := InternalToken(secret)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got := r.Header.Get(InternalHeader)
+			if want == "" || !hmac.Equal([]byte(got), []byte(want)) {
+				response.Error(w, http.StatusUnauthorized, "internal token required")
 				return
 			}
 			next.ServeHTTP(w, r)

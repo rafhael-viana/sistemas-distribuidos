@@ -15,8 +15,10 @@ func New(auth *handler.AuthHandler, secret []byte, logger *applog.Logger) http.H
 	r.Use(authn.Authenticate(secret))
 
 	r.HandleFunc("/health", sharedhandler.Health).Methods(http.MethodGet)
-	// Interno: não é exposto pelo gateway.
-	r.HandleFunc("/internal/access/{id}", auth.Access).Methods(http.MethodGet)
+	// Interno: não é exposto pelo gateway e exige o token interno, porque a
+	// porta do auth fica acessível para depuração.
+	r.Handle("/internal/access/{id}", authn.RequireInternal(secret)(http.HandlerFunc(auth.Access))).
+		Methods(http.MethodGet)
 
 	api := r.PathPrefix("/api/v1/auth").Subrouter()
 	api.HandleFunc("/register", auth.Register).Methods(http.MethodPost)

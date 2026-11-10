@@ -48,7 +48,7 @@ func main() {
 
 	logs := eventbus.NewKafkaPublisher(cfg.KafkaBrokers, events.TopicLogs)
 	logger := applog.New(serviceName, logs)
-	guard := gateway.NewAccessGuard(cfg.AuthServiceURL)
+	guard := gateway.NewAccessGuard(cfg.AuthServiceURL, []byte(cfg.JWTSecret))
 
 	srv := server.New(cfg, gateway.New(up, []byte(cfg.JWTSecret), guard, status, logger))
 	err := srv.Run()

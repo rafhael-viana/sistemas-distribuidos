@@ -54,7 +54,10 @@ func main() {
 		}
 	}()
 
-	srv := server.New(cfg, router.New(emailHandler, logger))
+	if cfg.JWTSecret == "" {
+		log.Println("WARNING: JWT_SECRET not set, the email API will reject every request")
+	}
+	srv := server.New(cfg, router.New(emailHandler, []byte(cfg.JWTSecret), logger))
 	err = srv.Run()
 
 	cancel()

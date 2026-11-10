@@ -1,10 +1,28 @@
-POST http://localhost:8082/api/v1/notifications/email
+### Login do admin (troque pelas credenciais do seed/users.json)
+# A API de e-mails só aceita o perfil admin.
+POST http://localhost:8080/api/v1/auth/login
 Content-Type: application/json
+
+{
+  "login": "admin",
+  "password": "troque-esta-senha"
+}
+
+# @lang=lua
+> {%
+  local body = vim.json.decode(response.body)
+  client.global.set("token", body.token)
+%}
+
+### Envio manual de e-mail (suporte)
+POST http://localhost:8080/api/v1/notifications/email
+Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
   "to": "other@example.com",
   "subject": "Bem-vindo!",
-  "body": "Olá Rafhael, sua conta foi criada com sucesso."
+  "body": "Olá, sua conta foi criada com sucesso."
 }
 
 # @lang=lua
@@ -13,11 +31,10 @@ Content-Type: application/json
   client.global.set("id_dinamico", body.id)
 %}
 
-### Nova onda do tchan
-
-GET http://localhost:8082/api/v1/notifications/email
-Content-Type: application/json
+### Lista os e-mails enviados
+GET http://localhost:8080/api/v1/notifications/email
+Authorization: Bearer {{token}}
 
 ###
-GET http://localhost:8082/api/v1/notifications/email/{{id_dinamico}}
-Content-Type: application/json
+GET http://localhost:8080/api/v1/notifications/email/{{id_dinamico}}
+Authorization: Bearer {{token}}

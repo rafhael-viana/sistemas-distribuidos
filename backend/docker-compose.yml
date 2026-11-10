@@ -125,6 +125,7 @@ services:
       DATABASE_URL: postgres://tcc:${POSTGRES_PASSWORD:-tcc}@postgres:5432/notification?sslmode=disable
       NOTIFICATION_PORT: "8082"
       KAFKA_BROKERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
     ports:
       - "8082:8082"
     healthcheck:

@@ -171,6 +171,12 @@ liberar a porta.
 | `GET /api/v1/audit/events`           | gestão e admin       |
 | `GET /api/v1/audit/logs`, `/logs/trace/{request_id}` | admin |
 | `GET /api/v1/system/status`          | admin                |
+| `/api/v1/notifications/email`        | admin                |
+
+A consulta de acesso que o gateway faz ao `auth` (`/internal/access/{id}`)
+não passa pelo gateway. Como a porta 8081 fica exposta, ela exige o header
+`X-Internal-Token`, derivado do `JWT_SECRET` (`authn.InternalToken`); sem ele,
+responde 401. Nenhum serviço aceita tokens se o `JWT_SECRET` estiver vazio.
 
 ## Logs técnicos e correlação
 

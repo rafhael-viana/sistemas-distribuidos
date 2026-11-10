@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -31,8 +32,9 @@ type cached struct {
 // AccessGuard barra, na borda, requisições de usuários inativos ou de
 // empresas suspensas e aplica o limite de requisições por minuto da empresa.
 type AccessGuard struct {
-	authURL string
-	client  *http.Client
+	authURL       string
+	internalToken string
+	client        *http.Client
 
 	mu      sync.Mutex
 	cache   map[string]cached
@@ -44,12 +46,15 @@ type window struct {
 	count int
 }
 
-func NewAccessGuard(authURL string) *AccessGuard {
+// NewAccessGuard recebe o JWT_SECRET para calcular o token interno exigido
+// pela rota /internal/access do auth.
+func NewAccessGuard(authURL string, secret []byte) *AccessGuard {
 	return &AccessGuard{
-		authURL: authURL,
-		client:  &http.Client{Timeout: 3 * time.Second},
-		cache:   make(map[string]cached),
-		windows: make(map[string]*window),
+		authURL:       authURL,
+		internalToken: authn.InternalToken(secret),
+		client:        &http.Client{Timeout: 3 * time.Second},
+		cache:         make(map[string]cached),
+		windows:       make(map[string]*window),
 	}
 }
 
@@ -88,10 +93,11 @@ func (g *AccessGuard) lookup(ctx context.Context, userID string) (access, error)
 	}
 	g.mu.Unlock()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, g.authURL+"/internal/access/"+userID, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, g.authURL+"/internal/access/"+url.PathEscape(userID), nil)
 	if err != nil {
 		return access{}, err
 	}
+	req.Header.Set(authn.InternalHeader, g.internalToken)
 	res, err := g.client.Do(req)
 	if err != nil {
 		return access{}, err
