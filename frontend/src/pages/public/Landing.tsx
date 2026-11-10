@@ -49,7 +49,9 @@ export function Landing() {
       <section id="metodologia" className="landing-section">
         <h2>Metodologia</h2>
         <p className="muted" style={{ maxWidth: 640, lineHeight: 1.6 }}>
-          Check-ins curtos e periódicos medem carga de trabalho, estresse, fadiga cognitiva e technostress. Cada resposta
+          Check-ins curtos e periódicos acompanham seis indicadores: estresse ocupacional, bem-estar psicológico,
+          equilíbrio entre vida pessoal e profissional, fatores psicossociais do trabalho, recuperação e comportamento
+          sedentário. Cada resposta
           gera uma devolutiva pessoal e alimenta indicadores agregados para o RH.
         </p>
         <div className="grid grid-3 mt-24">

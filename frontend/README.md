@@ -23,8 +23,8 @@ antes (`backend/README.md`).
 | `/login`, `/cadastro`              | Login e cadastro (integrados ao `auth`)           |
 | `/onboarding`                      | Privacidade → check-ins (passo 2 de 3) → conclusão |
 | `/app`                             | Dashboard do colaborador                          |
-| `/app/checkin`                     | Check-in periódico em 4 etapas                    |
-| `/app/checkin/devolutiva`          | Devolutiva de saúde calculada das respostas       |
+| `/app/checkin`                     | Check-in dos indicadores vencidos (`?todos=1` pergunta os seis) |
+| `/app/checkin/devolutiva`          | Devolutiva por indicador, calculada das respostas |
 | `/app/historico`                   | Histórico de bem-estar                            |
 | `/app/bem-estar`                   | Central de Bem-estar (mensagens ativas do RH)     |
 | `/app/notificacoes`                | Minhas notificações                               |
@@ -73,6 +73,24 @@ Contas de gestão e admin são criadas pelo seed do backend (`backend/README.md`
   colaboradores.
 
 O admin escolhe a empresa das telas de gestão no seletor da barra lateral.
+
+## Indicadores do check-in
+
+O check-in segue a Matriz de Indicadores do TCC (Quadro 2), definida em
+`src/data/checkin.ts`:
+
+| Indicador                                   | Periodicidade | Uso                       |
+| ------------------------------------------- | ------------- | ------------------------- |
+| Estresse ocupacional                        | Semanal       | Individual e agregado     |
+| Bem-estar psicológico                       | Quinzenal     | Individual e agregado     |
+| Equilíbrio entre vida pessoal e profissional | Mensal       | Individual e agregado     |
+| Fatores psicossociais do trabalho           | Mensal        | Só agregado               |
+| Recuperação e desligamento psicológico      | Quinzenal     | Individual e agregado     |
+| Comportamento sedentário                    | Semanal       | Individual e educativo    |
+
+Cada check-in pergunta só os indicadores vencidos. Os itens e as faixas de
+pontuação são provisórios: ao adotar instrumentos validados, troque `items` e
+`instrument` de cada indicador pelo texto e pela pontuação publicados.
 
 ## O que ainda é mock
 

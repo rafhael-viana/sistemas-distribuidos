@@ -50,12 +50,16 @@ export function AdminDashboard() {
         <span className="xs muted">Última atualização: Hoje às 08:30h (Atualizado diariamente)</span>
       </div>
 
-      <div className="grid grid-4 mt-16">
-        <Kpi label="Bem-estar Médio" value="78.4%" delta="↑ 2.4%" desc="Média geral satisfatória" />
-        <Kpi label="Estresse Ocupacional" value="32.1%" delta="↓ 1.2%" desc="Baixo risco de sobrecarga" />
-        <Kpi label="Carga Percebida" value="Regular" delta="Estável" desc="Volume condizente com horas" />
-        <Kpi label="Technostress" value="41.5%" delta="↑ 0.8%" desc="Fadiga de tela em monitoramento" />
+      {/* Os seis indicadores do Quadro 2, agregados. Valores ilustrativos até existir a API de check-in. */}
+      <div className="grid grid-3 mt-16">
+        <Kpi label="Estresse Ocupacional" value="3,2 / 5" delta="↑ 0,1" desc="Semanal · 5 = pouco estresse percebido" />
+        <Kpi label="Bem-estar Psicológico" value="3,9 / 5" delta="↑ 0,2" desc="Quinzenal · média da equipe" />
+        <Kpi label="Equilíbrio Vida–Trabalho" value="3,4 / 5" delta="Estável" desc="Mensal · distribuição das respostas" />
+        <Kpi label="Fatores Psicossociais" value="3,5 / 5" delta="↓ 0,1" desc="Mensal · demandas, autonomia, apoio, reconhecimento" />
+        <Kpi label="Recuperação e Desligamento" value="3,0 / 5" delta="↑ 0,1" desc="Quinzenal · capacidade de se desligar" />
+        <Kpi label="Comportamento Sedentário" value="2,7 / 5" delta="Estável" desc="Semanal · tempo sentado e pausas" />
       </div>
+      <div className="xs muted mt-8">Valores ilustrativos do protótipo. Escala de 1 a 5, em que 5 é a situação mais favorável; só grupos acima do limiar de agregação são exibidos.</div>
 
       <div className="grid grid-main-side mt-16" style={{ alignItems: 'start' }}>
         <div className="card">
@@ -73,8 +77,9 @@ export function AdminDashboard() {
         <div className="card">
           <div className="card-title" style={{ fontSize: 13 }}>Fatores de Atenção</div>
           <div className="stack gap-12 mt-16">
-            <Factor color="var(--orange)" title="Sobrecarga de Tela (TI)" desc="Profissionais reportam maior cansaço visual às quintas-feiras." />
-            <Factor color="var(--green)" title="Intervalos de Descanso" desc="Adesão de 82% à pausa de ergonomia sugerida." />
+            <Factor color="var(--orange)" title="Demandas (fatores psicossociais)" desc="Dimensão com a menor média: volume de demandas acima do tempo disponível." />
+            <Factor color="var(--orange)" title="Comportamento Sedentário" desc="Maioria relata de 6 a 8 h sentada e pausas só a cada 2 h." />
+            <Factor color="var(--green)" title="Bem-estar Psicológico" desc="Tendência de melhora nas últimas quatro coletas quinzenais." />
           </div>
         </div>
       </div>

@@ -15,7 +15,7 @@ export interface Preferences {
 const PREFS_KEY = 'mindsync.preferences'
 
 export function loadPreferences(): Preferences {
-  const defaults: Preferences = { checkins: true, feedback: true, aggregated: false, channel: 'Slack Integration', schedule: 'Terças e Quintas às 16:00' }
+  const defaults: Preferences = { checkins: true, feedback: true, aggregated: false, channel: 'Slack Integration', schedule: 'Terças às 16:00' }
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') }
   } catch {
@@ -61,7 +61,7 @@ interface StepProps {
 
 function PrivacyStep({ prefs, setPrefs, onCancel, onNext }: StepProps & { onCancel: () => void; onNext: () => void }) {
   const items: { key: 'checkins' | 'feedback' | 'aggregated'; title: string; desc: string }[] = [
-    { key: 'checkins', title: 'Check-ins periódicos', desc: 'Perguntas breves sobre estresse, foco e conforto ergonômico no seu terminal.' },
+    { key: 'checkins', title: 'Check-ins periódicos', desc: 'Perguntas breves sobre estresse, bem-estar, recuperação, equilíbrio vida–trabalho, condições de trabalho e tempo sentado.' },
     { key: 'feedback', title: 'Devolutivas pessoais', desc: 'Dicas geradas automaticamente com base nos seus dados para o seu bem-estar privado.' },
     {
       key: 'aggregated',
@@ -129,8 +129,9 @@ function CheckinStep({ prefs, setPrefs, onSkip, onNext }: StepProps & { onSkip: 
       <StepHeader step={2} />
       <h1>Como funcionam os check-ins?</h1>
       <p className="lead" style={{ marginTop: 10 }}>
-        Nossos check-ins são desenhados para não atrapalhar seu fluxo de trabalho. São apenas 3 perguntas simples duas
-        vezes por semana no seu canal de preferência.
+        Nossos check-ins são desenhados para não atrapalhar seu fluxo de trabalho. Cada check-in tem de 5 a 19
+        perguntas rápidas: estresse e tempo sentado semanalmente, bem-estar e recuperação a cada 15 dias, equilíbrio
+        vida–trabalho e condições de trabalho uma vez por mês.
       </p>
       <div className="grid grid-2 mt-24" style={{ gap: 12 }}>
         <div style={{ background: '#f8fafc', borderRadius: 12, padding: 14 }}>
@@ -153,9 +154,9 @@ function CheckinStep({ prefs, setPrefs, onSkip, onNext }: StepProps & { onSkip: 
             <option>E-mail corporativo</option>
           </select>
           <select className="select" value={prefs.schedule} onChange={(e) => setPrefs({ ...prefs, schedule: e.target.value })}>
-            <option>Terças e Quintas às 16:00</option>
-            <option>Segundas e Quartas às 10:00</option>
-            <option>Quartas e Sextas às 14:00</option>
+            <option>Terças às 16:00</option>
+            <option>Segundas às 10:00</option>
+            <option>Sextas às 14:00</option>
           </select>
         </div>
       </div>

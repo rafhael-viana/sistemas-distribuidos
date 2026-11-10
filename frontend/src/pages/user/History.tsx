@@ -3,28 +3,43 @@ import { Info } from 'lucide-react'
 import { PageHeader } from '../../components/PageHeader'
 import { UserHeaderRight } from '../../components/UserHeaderRight'
 import { LineChart } from '../../components/LineChart'
+import { INDICATORS, levelOf, loadHistory, type IndicatorId } from '../../data/checkin'
 
 type Period = 'week' | 'month' | 'quarter'
 
-const SERIES: Record<Period, Record<string, number[]>> = {
-  week: { mental: [4.0, 4.1, 4.3, 4.2, 4.2, 4.3, 4.2], stress: [2.7, 2.6, 2.6, 2.5, 2.5, 2.4, 2.5], load: [3.9, 4.0, 3.8, 3.8, 3.7, 3.8, 3.8], tech: [4.5, 4.6, 4.6, 4.6, 4.7, 4.6, 4.6] },
-  month: { mental: [4.0, 3.9, 4.3, 4.2, 4.1, 4.2, 4.2], stress: [2.8, 2.9, 2.6, 2.5, 2.6, 2.4, 2.4], load: [3.9, 3.8, 4.1, 3.8, 3.7, 3.7, 3.7], tech: [4.5, 4.5, 4.6, 4.7, 4.6, 4.6, 4.6] },
-  quarter: { mental: [3.6, 3.8, 3.7, 4.0, 4.1, 4.2, 4.2], stress: [3.2, 3.0, 3.1, 2.8, 2.6, 2.5, 2.5], load: [4.2, 4.1, 4.0, 3.9, 3.8, 3.8, 3.8], tech: [4.2, 4.3, 4.4, 4.5, 4.5, 4.6, 4.6] },
+// Séries de exemplo (escala 1–5, maior = mais favorável), mostradas enquanto o
+// indicador tem menos de duas respostas no período.
+const SAMPLE: Record<IndicatorId, number[]> = {
+  estresse: [2.7, 2.9, 3.0, 3.3, 3.0, 3.4, 3.3],
+  bemEstar: [3.6, 3.8, 3.7, 4.0, 4.1, 4.2, 4.2],
+  equilibrio: [3.2, 3.0, 3.1, 3.3, 3.4, 3.3, 3.5],
+  psicossocial: [],
+  recuperacao: [2.8, 2.9, 2.6, 2.9, 3.0, 3.1, 3.2],
+  sedentarismo: [2.0, 2.5, 2.5, 3.0, 2.5, 3.0, 3.5],
 }
+const PERIOD_DAYS: Record<Period, number> = { week: 7, month: 30, quarter: 90 }
 
 const PERIOD_LABELS: Record<Period, string> = { week: 'Última semana', month: 'Último mês', quarter: 'Últimos 3 meses' }
 
 export function History() {
   const [period, setPeriod] = useState<Period>('month')
-  const s = SERIES[period]
   const last = (xs: number[]) => xs[xs.length - 1]!
+  const since = Date.now() - PERIOD_DAYS[period] * 24 * 60 * 60 * 1000
+  const history = loadHistory().filter((e) => new Date(e.at).getTime() >= since)
 
-  const cards = [
-    { title: 'Equilíbrio Mental (Bem-estar)', sub: 'Nível saudável de foco e paz', data: s.mental!, color: 'var(--green)' },
-    { title: 'Estresse Percebido', sub: 'Estável, sob controle moderado', data: s.stress!, color: 'var(--orange)' },
-    { title: 'Carga de Trabalho', sub: 'Demanda ainda elevada na semana', data: s.load!, color: 'var(--orange)' },
-    { title: 'Estresse de Tecnologia (Technostress)', sub: 'Excelente adaptação aos sistemas', data: s.tech!, color: 'var(--green)' },
-  ]
+  // Fatores psicossociais só aparecem de forma agregada (Quadro 2).
+  const cards = INDICATORS.filter((ind) => ind.scope === 'individual').map((ind) => {
+    const real = history.map((e) => e.scores[ind.id]?.value).filter((v): v is number => v !== undefined)
+    const sample = real.length < 2
+    const data = sample ? SAMPLE[ind.id] : real
+    const lv = levelOf(last(data))
+    return {
+      title: ind.name,
+      sub: `Coleta ${ind.periodLabel.toLowerCase()}${sample ? ' · valores de exemplo' : ` · ${real.length} respostas`}`,
+      data,
+      color: lv === 'favoravel' ? 'var(--green)' : lv === 'moderado' ? 'var(--orange)' : 'var(--red)',
+    }
+  })
 
   function exportPDF() {
     window.print()
@@ -46,7 +61,7 @@ export function History() {
       <div className="row gap-12 mt-16 small" style={{ background: 'var(--primary-50)', color: 'var(--primary)', borderRadius: 10, padding: '12px 14px', alignItems: 'flex-start' }}>
         <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} />
         <span style={{ lineHeight: 1.5 }}>
-          Sua jornada é única. Esses gráficos mostram a variação do seu bem-estar pessoal e não servem como comparação externa ou diagnósticos formais. Use-os para identificar padrões pessoais de estresse e descanso.
+          Sua jornada é única. Esses gráficos mostram a variação do seu bem-estar pessoal e não servem como comparação externa ou diagnósticos formais. Use-os para identificar padrões pessoais de estresse e descanso. Em todos os gráficos, 5 é a situação mais favorável.
         </span>
       </div>
 
@@ -63,7 +78,7 @@ export function History() {
             <div className="mt-12" style={{ maxWidth: '75%' }}>
               <LineChart values={c.data} max={5} height={60} dot />
             </div>
-            <div className="chart-axis"><span>Seg</span><span>Qua</span><span>Sex</span><span>Dom</span></div>
+            <div className="chart-axis"><span>Mais antigo</span><span>Mais recente</span></div>
           </div>
         ))}
       </div>

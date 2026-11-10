@@ -4,13 +4,16 @@ import { PageHeader } from '../../components/PageHeader'
 import { UserHeaderRight } from '../../components/UserHeaderRight'
 import { LineChart } from '../../components/LineChart'
 import { firstName, useAuth } from '../../context/AuthContext'
-import { loadResult } from '../../data/checkin'
+import { dueIndicators, latestByIndicator, levelOf, loadHistory, nextDue, type IndicatorId } from '../../data/checkin'
 
 export function Dashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const last = loadResult()
-  const doneToday = last && new Date(last.at).toDateString() === new Date().toDateString()
+  const history = loadHistory()
+  const due = dueIndicators(history)
+  const doneToday = due.length === 0
+  const latest = latestByIndicator(history)
+  const upcoming = nextDue(history).find((n) => n.date.getTime() > Date.now())
 
   return (
     <>
@@ -23,12 +26,12 @@ export function Dashboard() {
       <div className="row between gap-16" style={{ background: 'linear-gradient(90deg, #2a0b4a, #4c1d95)', color: '#fff', borderRadius: 14, padding: '20px 22px' }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>
-            {doneToday ? 'Check-in de hoje concluído!' : 'Seu check-in de hoje está disponível'}
+            {doneToday ? 'Check-ins em dia!' : `Check-in disponível: ${due.length} ${due.length === 1 ? 'indicador' : 'indicadores'}`}
           </div>
           <p style={{ fontSize: 12, color: '#ddd6fe', marginTop: 6, maxWidth: 420, lineHeight: 1.5 }}>
             {doneToday
-              ? 'Obrigado! Sua devolutiva já está pronta para consulta.'
-              : 'Leva menos de 1 minuto. Suas respostas ajudam o sistema a calibrar as dicas de ergonomia e fadiga cognitiva.'}
+              ? `Obrigado! Sua devolutiva está pronta.${upcoming ? ` Próxima coleta em ${upcoming.date.toLocaleDateString('pt-BR')} (${upcoming.indicator.name.toLowerCase()}).` : ''}`
+              : `Pendentes: ${due.map((d) => d.name.toLowerCase()).join(', ')}. Leva poucos minutos.`}
           </p>
         </div>
         <button className="btn" style={{ background: '#fff', color: 'var(--primary)' }} onClick={() => navigate(doneToday ? '/app/checkin/devolutiva' : '/app/checkin')}>
@@ -67,13 +70,24 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-3 mt-16">
-        <StatCard label="Nível de Foco" value="Excelente" desc="Seu maior período de foco ininterrupto foi na quarta-feira." />
-        <StatCard label="Qualidade do Sono" value="7.8h / média" desc="Seu sono manteve-se estável e regenerativo nesta semana." />
-        <StatCard label="Sessões Ergonomia" value="4 realizadas" desc="Ótimo ritmo de exercícios para prevenir LER/DORT." />
+        {CARDS.map(([id, label, desc]) => {
+          const l = latest[id]
+          const value = l ? `${l.score.value.toFixed(1)} / 5 · ${LEVEL_LABEL[levelOf(l.score.value)]}` : 'Sem resposta'
+          return <StatCard key={id} label={label} value={value} desc={desc} />
+        })}
       </div>
     </>
   )
 }
+
+const LEVEL_LABEL = { favoravel: 'favorável', moderado: 'moderado', atencao: 'atenção' } as const
+
+// Indicadores semanais e quinzenais do Quadro 2 em destaque no painel.
+const CARDS: [IndicatorId, string, string][] = [
+  ['estresse', 'Estresse Ocupacional', 'Coleta semanal. 5 = pouco estresse percebido.'],
+  ['recuperacao', 'Recuperação e Desligamento', 'Coleta quinzenal. Capacidade de se desligar do trabalho.'],
+  ['sedentarismo', 'Comportamento Sedentário', 'Coleta semanal. Tempo sentado e frequência de pausas.'],
+]
 
 function StatCard({ label, value, desc }: { label: string; value: string; desc: string }) {
   return (

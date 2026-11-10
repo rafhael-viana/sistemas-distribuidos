@@ -3,17 +3,15 @@ import { Plus, X } from 'lucide-react'
 import { PageHeader } from '../../components/PageHeader'
 import { listTeams, listUsers, type Team } from '../../api/org'
 import { useTenantScope } from '../../context/TenantScope'
+import { INDICATORS } from '../../data/checkin'
 
-const DIMENSIONS = [
-  { key: 'Sobrecarga', summary: 'Sobrecarga', label: 'Carga de Trabalho (Escala de Estresse de Carga)' },
-  { key: 'Ergonomia', summary: 'Ergonomia, Conforto', label: 'Ergonomia e Conforto Postural' },
-  { key: 'Technostress', summary: 'Technostress', label: 'Technostress (Indicador de Fadiga Tecnológica)' },
-]
+// Indicadores da Matriz do TCC (Quadro 2), com a periodicidade proposta.
+const DIMENSIONS = INDICATORS.map((i) => ({ key: i.id as string, summary: i.name, label: `${i.name} (${i.periodLabel.toLowerCase()})` }))
 
 export function Cycles() {
-  const [name, setName] = useState('Mapeamento de Clima e Ergonomia Q2 - Engenharia')
+  const [name, setName] = useState('Acompanhamento de Saúde Ocupacional Q2 - Engenharia')
   const [frequency, setFrequency] = useState('Quinzenal')
-  const [dims, setDims] = useState(['Sobrecarga', 'Ergonomia'])
+  const [dims, setDims] = useState(INDICATORS.map((i) => i.id as string))
   const [scope, setScope] = useState<'teams' | 'org'>('teams')
   // Equipes e colaboradores reais da empresa (serviço auth).
   const { tenantId, isAdmin } = useTenantScope()

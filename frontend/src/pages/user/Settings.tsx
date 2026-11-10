@@ -5,7 +5,7 @@ import { PageHeader } from '../../components/PageHeader'
 import { UserHeaderRight } from '../../components/UserHeaderRight'
 import { Toggle } from '../../components/Toggle'
 import { useAuth } from '../../context/AuthContext'
-import { loadResult } from '../../data/checkin'
+import { loadHistory } from '../../data/checkin'
 import { loadPreferences } from '../onboarding/Onboarding'
 
 const SETTINGS_KEY = 'mindsync.settings'
@@ -53,7 +53,7 @@ export function Settings() {
   }
 
   function exportData() {
-    const data = { usuario: user, preferencias: loadPreferences(), configuracoes: settings, ultimoCheckin: loadResult() }
+    const data = { usuario: user, preferencias: loadPreferences(), configuracoes: settings, checkins: loadHistory() }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -119,8 +119,8 @@ export function Settings() {
           <div className="card">
             <div className="card-title">Termos de Consentimento (LGPD)</div>
             <SettingRow
-              title="Análise de Fadiga Cognitiva"
-              desc="Autorizo processar meus dados de tempo de foco para gerar métricas de cansaço mental."
+              title="Processamento dos Check-ins"
+              desc="Autorizo o processamento das minhas respostas aos check-ins para gerar minha devolutiva e os indicadores agregados da empresa."
               checked={settings.fatigueAnalysis}
               onChange={(v) => update('fatigueAnalysis', v)}
             />
